@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 from faster_whisper.vad import VadOptions, get_speech_timestamps
@@ -19,6 +21,14 @@ CONTEXT_CHARS = 80  # 次の認識に渡す直前の文脈の長さ
 Vad = Callable[[np.ndarray, VadOptions], list[dict[str, int]]]
 
 
+@dataclass(frozen=True)
+class Event:
+    kind: Literal["partial", "final", "clear"]  # clear: 確定したが文字にならなかった（暫定表示を消す）
+    text: str
+    start: float  # このストリームの先頭からの秒数（受け取った音声の時間）
+    end: float
+
+
 class Session:
     """1 本の音声ストリームの状態（バッファ・文脈）を持つ"""
 
@@ -27,6 +37,7 @@ class Session:
         self.speed = speed
         self.detect = vad
         self.buf = np.zeros(0, dtype=np.float32)
+        self.consumed = 0  # buf の先頭が、ストリームの先頭から何サンプル目か
         self.since_partial = 0
         self.context = ""
         # 倍速だと無音も短くなるので、判定の時間を速度で割る
@@ -61,17 +72,25 @@ class Session:
     def _run(self, audio: np.ndarray, final: bool) -> str:
         return self.tr.transcribe(time_stretch(audio, self.speed), self.context, final)
 
-    def step(self, force: bool = False) -> list[tuple[str, str]]:
+    def _drop(self, n: int) -> None:
+        """buf の先頭 n サンプルを捨てる"""
+        self.buf = self.buf[n:]
+        self.consumed += n
+
+    def _event(self, kind: Literal["partial", "final", "clear"], text: str, start: int, end: int) -> Event:
+        return Event(kind, text, (self.consumed + start) / SR, (self.consumed + end) / SR)
+
+    def step(self, force: bool = False) -> list[Event]:
         n = len(self.buf)
         if n < int(0.3 * SR):
             if force:
-                self.buf = self.buf[:0]
+                self._drop(n)
             return []
 
         speech = self.detect(self.buf, self.vad)
         if not speech:
             # 発話なし: 古い音は捨てる（発話の頭を切らないよう最後の 0.5 秒だけ残す）
-            self.buf = self.buf[:0] if force else self.buf[-int(0.5 * SR) :]
+            self._drop(n if force else max(0, n - int(0.5 * SR)))
             self.since_partial = 0
             return []
 
@@ -87,16 +106,16 @@ class Session:
         if cut is not None:
             # 先頭は切り詰めない（短い語頭が VAD で落ちて「抜け」になるのを防ぐ）
             text = self._run(self.buf[:cut], final=True)
-            self.buf = self.buf[cut:]
+            event = self._event("final" if text else "clear", text, speech[0]["start"], min(cut, last_end))
+            self._drop(cut)
             self.since_partial = 0
             if text:
                 self.context = text[-CONTEXT_CHARS:]
-                return [("final", text)]
-            return []
+            return [event]
 
         if self.since_partial >= int(PARTIAL_INTERVAL_S * SR):
             self.since_partial = 0
             text = self._run(self.buf, final=False)
             if text:
-                return [("partial", text)]
+                return [self._event("partial", text, speech[0]["start"], last_end)]
         return []

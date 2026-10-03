@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>リアルタイム字幕</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>リアルタイム字幕</h1>
+    <p id="status" class="status" data-state="offline" role="status">サーバーに接続中…</p>
+  </header>
+  <main id="scroller">
+    <p id="empty" class="empty">音声を再生すると、ここに字幕が表示されます。</p>
+    <ol id="finals" class="captions"></ol>
+    <ol id="partials" class="captions" aria-live="polite"></ol>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -28,9 +28,17 @@ PC で再生中の音声（ブラウザ・動画・オンライン会議）や�
 ## 現在の構成
 
 ```
-server/transcribe_server.py   WSL。WebSocket で 16kHz mono int16 PCM を受け取り文字起こし
+src/realtime_transcriber/     WSL。サーバー本体（python -m realtime_transcriber で起動）
+  app.py                      FastAPI: GET / (ビューア), WS /ingest (WS / は旧クライアント用), WS /captions, /api/*
+  hub.py                      確定文の履歴・閲覧者への配信・transcripts/ への保存
+  segmenter.py                VAD で区切り、暫定/確定の Event（時刻付き）を出す
+  transcriber.py              Transcriber Protocol と faster-whisper 実装
+  config.py                   既定値 < config.toml < CLI 引数
+  static/                     ビューア（素の HTML/JS/CSS）
+server/transcribe_server.py   互換シム（start.bat から呼ばれる）
 capture_client.py             Windows。WASAPI ループバックで再生音を取り込みサーバーへ送る
 start.bat                     Windows。上の 2 つをまとめて起動
+tests/                        pytest（GPU 不要。偽の Transcriber と偽の VAD を使う）
 ```
 
 サーバーの処理: Silero VAD で発話区間を判定 → 発話中は 1 秒ごとに軽量モデルで暫定表示
