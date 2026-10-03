@@ -30,7 +30,15 @@ sys.path.insert(0, str(HERE))
 
 from capture import LoopbackStreamer  # noqa: E402
 from controller import Controller, Status  # noqa: E402
-from tray_view import APP_NAME, describe, draw_icon, should_notify, tooltip, write_ico  # noqa: E402
+from tray_view import (  # noqa: E402
+    APP_NAME,
+    describe,
+    draw_icon,
+    first_run_hint,
+    should_notify,
+    tooltip,
+    write_ico,
+)
 from winplatform import WindowsPlatform, acquire_single_instance, read_port  # noqa: E402
 
 MUTEX_NAME = "Local\\realtime-transcriber-tray"
@@ -71,7 +79,8 @@ def main() -> None:
     mutex = acquire_single_instance(MUTEX_NAME)  # noqa: F841  終了まで保持する
     if mutex is None:
         log.info("すでに起動しているので、字幕画面を開いて終わります")
-        webbrowser.open(f"http://localhost:{args.port or read_port(project)}/")
+        if not args.no_browser:
+            webbrowser.open(f"http://localhost:{args.port or read_port(project)}/")
         return
     run_tray(WindowsPlatform(project, LOG_DIR, port=args.port), args)
 
@@ -151,6 +160,8 @@ def run_tray(platform: WindowsPlatform, args: argparse.Namespace) -> None:
 
     def setup(icon: pystray.Icon) -> None:
         icon.visible = True
+        if hint := first_run_hint(LOG_DIR / "first_run_hint_shown"):
+            icon.notify(hint, APP_NAME)
         threading.Thread(target=controller.run, name="controller", daemon=True).start()
         if args.quit_after:
             threading.Timer(args.quit_after, quit_app).start()

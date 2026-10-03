@@ -5,7 +5,16 @@ from pathlib import Path
 import pytest
 from controller import Status
 from PIL import Image
-from tray_view import COLORS, TOOLTIP_MAX, describe, draw_icon, should_notify, tooltip, write_ico
+from tray_view import (
+    COLORS,
+    TOOLTIP_MAX,
+    describe,
+    draw_icon,
+    first_run_hint,
+    should_notify,
+    tooltip,
+    write_ico,
+)
 
 RUNNING = Status(phase="running", server="ready", capture="streaming")
 
@@ -74,3 +83,9 @@ def test_write_ico_contains_small_and_large_sizes(tmp_path: Path):
     write_ico(str(path))
     with Image.open(path) as ico:
         assert {(16, 16), (32, 32), (256, 256)} <= ico.info["sizes"]
+
+
+def test_first_run_hint_is_shown_only_once(tmp_path: Path):
+    flag = tmp_path / "realtime-transcriber" / "first_run_hint_shown"
+    assert "「^」" in first_run_hint(flag)
+    assert first_run_hint(flag) is None

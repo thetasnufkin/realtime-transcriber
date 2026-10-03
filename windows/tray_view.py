@@ -5,6 +5,7 @@ pystray を読み込まないので、WSL の pytest でも検証できる。
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from controller import Status
@@ -14,6 +15,10 @@ if TYPE_CHECKING:
 
 APP_NAME = "リアルタイム字幕"
 TOOLTIP_MAX = 127  # Windows の通知領域のツールチップの上限（128 文字未満）
+FIRST_RUN_HINT = (
+    "タスクバー右下の「^」（隠れているインジケーター）の中に常駐しています。"
+    "クリックで字幕画面、右クリックでメニュー（終了もここから）"
+)
 COLORS = {
     "gray": (120, 113, 108),  # 起動中・読み込み中
     "green": (22, 163, 74),  # 受信中
@@ -62,6 +67,15 @@ def should_notify(prev: Status, new: Status) -> str | None:
     if new.capture == "error" and prev.capture != "error":
         return new.message
     return None
+
+
+def first_run_hint(flag: Path) -> str | None:
+    """初めて起動したときだけ、トレイの場所の案内を返す（Windows 11 では新しいアイコンが隠れるため）"""
+    if flag.exists():
+        return None
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.touch()
+    return FIRST_RUN_HINT
 
 
 def draw_icon(color: str, size: int = 64) -> Image:
