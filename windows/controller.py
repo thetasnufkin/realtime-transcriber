@@ -43,8 +43,10 @@ class Streamer(Protocol):
 class Platform(Protocol):
     viewer_url: str
     log_path: str
+    paused: bool  # 直近の server_state() で読んだ一時停止の状態
 
     def server_state(self) -> ServerState: ...
+    def set_paused(self, paused: bool) -> None: ...
     def launch_server(self) -> ServerProcess: ...
     def request_shutdown(self) -> None: ...
     def kill_server(self) -> None: ...
@@ -58,6 +60,7 @@ class Status:
     phase: Literal["starting", "running", "stopping", "stopped", "failed"] = "starting"
     server: ServerState = "down"
     capture: Literal["off", "waiting", "streaming", "error"] = "off"
+    paused: bool = False
     message: str = ""
 
 
@@ -69,12 +72,14 @@ class Controller:
         on_status: Callable[[Status], None] = lambda s: None,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,
+        capture_on_start: bool = True,
     ):
         self.platform = platform
         self.make_streamer = make_streamer
         self.on_status = on_status
         self.sleep = sleep
         self.clock = clock
+        self.capture_on_start = capture_on_start
         self.status = Status()
         self.process: ServerProcess | None = None  # 自分で起動したときだけ
         self.reused = False
@@ -113,7 +118,8 @@ class Controller:
             self.process = self.platform.launch_server()
         else:
             self.reused = True  # start.bat などで起動済み
-        self.set_capture(True)  # サーバーを待つ間も取り込みは始めておく（つながるまで再接続する）
+        if self.capture_on_start:
+            self.set_capture(True)  # サーバーを待つ間も取り込みは始めておく（つながるまで再接続する）
 
         deadline = self.clock() + START_TIMEOUT_S
         while state == "down":
@@ -144,7 +150,7 @@ class Controller:
                 self._stop_capture()
                 self._update(phase="failed", server="down", message="サーバーが停止しました")
                 return
-            self._update(server=state)
+            self._update(server=state, paused=self.platform.paused)
             self.sleep(POLL_S)
 
     # --- 取り込み ---
@@ -185,6 +191,12 @@ class Controller:
             if thread is not None and thread.ident is not None:
                 thread.join(CAPTURE_JOIN_S)
         self._update(capture="off")
+
+    # --- 一時停止 ---
+    def set_paused(self, paused: bool) -> None:
+        """字幕画面の「一時停止」と同じ（区切り待ちの途中の音声も捨てる）"""
+        self.platform.set_paused(paused)
+        self._update(paused=paused)  # 次の見張りを待たずに表示を変える
 
     # --- 終了 ---
     def quit(self) -> str:

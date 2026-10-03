@@ -65,7 +65,7 @@ def test_health_waits_for_the_model(tmp_path: Path):
         assert (r.status_code, r.json()["status"]) == (503, "loading")
         gate.set()
         wait_ready(client)
-        assert client.get("/api/health").json() == {"status": "ready"}
+        assert client.get("/api/health").json() == {"status": "ready", "paused": False}
 
 
 def test_load_failure_is_reported(tmp_path: Path):
@@ -212,3 +212,19 @@ def test_disconnect_flushes_the_rest(start_live_server):
 
     kinds = [m["type"] for m in msgs if m["type"] != "partial"]
     assert kinds == ["status", "final", "clear", "status"]
+
+
+def test_log_output_has_no_terminal_control_codes(tmp_path: Path, capsys):
+    """トレイから起動したとき（標準出力がファイル）は、確定文だけを普通の行で書く"""
+    import asyncio
+
+    from realtime_transcriber.hub import Hub
+    from realtime_transcriber.segmenter import Event
+
+    hub = Hub(tmp_path, echo=True)  # pytest の標準出力は端末ではない
+    asyncio.run(hub.publish(1, Event("partial", "途中", 0, 1), 0))
+    asyncio.run(hub.publish(1, Event("final", "確定した文。", 0, 1), 0))
+    asyncio.run(hub.clear(1))
+    out = capsys.readouterr().out
+    assert "\x1b" not in out and "\r" not in out and "途中" not in out
+    assert out.endswith("] 確定した文。\n")

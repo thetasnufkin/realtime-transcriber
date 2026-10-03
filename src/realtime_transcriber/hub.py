@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -30,6 +31,9 @@ class Hub:
         out_dir.mkdir(parents=True, exist_ok=True)
         self.path = out_dir / f"{dt.datetime.now():%Y%m%d_%H%M%S}.txt"
         self.echo = echo
+        # 端末なら暫定結果を同じ行に上書き表示する。ログファイルへの出力（トレイから起動）では
+        # 上書きや色の制御文字が読みにくいので、確定文だけを普通の行で書く
+        self.live = echo and sys.stdout.isatty()
         self.captions: list[Caption] = []
         self.viewers: set[Viewer] = set()
         self.status: dict[str, Any] = {}
@@ -45,7 +49,7 @@ class Hub:
     async def publish(self, source: int, event: Event, offset: float) -> None:
         """offset: そのストリームが始まった時点の elapsed()"""
         if event.kind == "partial":
-            if self.echo:
+            if self.live:
                 # 暫定結果は同じ行を上書き（長いと折り返して崩れるので末尾だけ）
                 print(f"\r\x1b[2K\x1b[90m… {event.text[-35:]}\x1b[0m", end="", flush=True)
             await self._broadcast({"type": "partial", "source": source, "text": event.text})
@@ -63,14 +67,14 @@ class Hub:
         )
         self.captions.append(cap)
         if self.echo:
-            print(f"\r\x1b[2K[{cap.at}] {cap.text}", flush=True)
+            print(f"\r\x1b[2K[{cap.at}] {cap.text}" if self.live else f"[{cap.at}] {cap.text}", flush=True)
         with self.path.open("a", encoding="utf-8") as f:
             f.write(f"[{cap.at}] {cap.text}\n")
         await self._broadcast({"type": "final", "source": source, **asdict(cap)})
 
     async def clear(self, source: int) -> None:
         """その入力の暫定表示を消す（確定文が空だった・入力が切断された）"""
-        if self.echo:
+        if self.live:
             print("\r\x1b[2K", end="", flush=True)
         await self._broadcast({"type": "clear", "source": source})
 

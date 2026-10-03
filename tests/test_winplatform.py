@@ -54,7 +54,11 @@ def test_server_state_reads_health(tmp_path: Path, start_live_server):  # noqa: 
     assert p.server_state() == "loading"  # 503 でも応答とみなす
     gate.set()
     wait_live_ready(addr)
-    assert p.server_state() == "ready"
+    assert p.server_state() == "ready" and p.paused is False
+    p.set_paused(True)
+    assert p.server_state() == "ready" and p.paused is True
+    p.set_paused(False)
+    assert p.server_state() == "ready" and p.paused is False
 
     down = WindowsPlatform(Path(r"\\wsl.localhost\Ubuntu\home\me\rt"), tmp_path, port=1)
     assert down.server_state() == "down"

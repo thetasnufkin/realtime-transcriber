@@ -34,6 +34,7 @@ class FakePlatform:
         self.on_launch = lambda: None  # 起動後のサーバーの様子
         self.obeys_shutdown = True
         self.obeys_kill = True
+        self.paused = False
 
     def server_state(self) -> str:
         return self.state
@@ -61,6 +62,10 @@ class FakePlatform:
 
     def open_browser(self, url: str) -> None:
         self.events.append(f"browser {url}")
+
+    def set_paused(self, paused: bool) -> None:
+        self.events.append(f"paused {paused}")
+        self.paused = paused
 
 
 class FakeStreamer:
@@ -257,3 +262,29 @@ def test_quit_during_startup_does_not_open_the_browser(state):
     t.join(2)
     assert not any(e.startswith("browser") for e in p.events)
     assert c.status.phase == "stopped"
+
+
+def test_pause_from_the_tray_and_from_the_viewer_are_both_shown():
+    p = FakePlatform("ready")
+    c, _, _ = make(p)
+    t = run_in_thread(c)
+    wait_for(lambda: c.status.phase == "running")
+    c.set_paused(True)
+    assert c.status.paused and p.events[-1] == "paused True"
+    p.paused = False  # 字幕画面の「▶ 再開」で再開された
+    wait_for(lambda: not c.status.paused)
+    c.quit()
+    t.join(2)
+
+
+def test_capture_can_be_left_off_at_start():
+    p = FakePlatform("ready")
+    clock = Clock()
+    c = Controller(
+        p, lambda on_state: FakeStreamer(p, on_state), sleep=clock.sleep, clock=clock, capture_on_start=False
+    )
+    t = run_in_thread(c)
+    wait_for(lambda: c.status.phase == "running")
+    assert c.status.capture == "off" and "capture.start" not in p.events
+    c.quit()
+    t.join(2)

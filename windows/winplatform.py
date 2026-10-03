@@ -68,6 +68,7 @@ class WindowsPlatform:
         self._base = f"http://127.0.0.1:{self.port}"
         log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = str(log_dir / "server.log")
+        self.paused = False
 
     def _wsl(self, command: str) -> list[str]:
         return [
@@ -85,16 +86,22 @@ class WindowsPlatform:
         return self._wsl(f"PYTHONUNBUFFERED=1 exec ./scripts/start_server.sh --port {self.port}")
 
     def server_state(self) -> ServerState:
+        """/api/health を読む。一時停止の状態も self.paused に覚えておく"""
         try:
             with urllib.request.urlopen(f"{self._base}/api/health", timeout=HTTP_TIMEOUT_S) as r:
-                return json.load(r)["status"]
+                body = json.load(r)
         except urllib.error.HTTPError as e:  # 503: 読み込み中・読み込み失敗
             try:
-                return json.load(e)["status"]
-            except (ValueError, KeyError):
+                body = json.load(e)
+            except ValueError:
                 return "error"
         except (OSError, ValueError):  # 接続できない・タイムアウト
             return "down"
+        self.paused = bool(body.get("paused", False))
+        return body.get("status", "error")
+
+    def set_paused(self, paused: bool) -> None:
+        self._post("/api/pause" if paused else "/api/resume")
 
     def launch_server(self) -> ServerProcess:
         log = Path(self.log_path)
@@ -110,11 +117,14 @@ class WindowsPlatform:
             )
 
     def request_shutdown(self) -> None:
-        req = urllib.request.Request(f"{self._base}/api/shutdown", method="POST")
+        self._post("/api/shutdown")  # 止まったかどうかは呼び出し側が確かめる
+
+    def _post(self, path: str) -> None:
+        req = urllib.request.Request(f"{self._base}{path}", method="POST")
         try:
             urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_S).close()
         except OSError:
-            pass  # すでに止まっている。止まったかどうかは呼び出し側が確かめる
+            pass  # サーバーが止まっている。状態は次の server_state() に出る
 
     def kill_server(self) -> None:
         with open(self.log_path, "ab") as out:
