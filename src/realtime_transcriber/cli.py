@@ -13,7 +13,7 @@ import argparse
 import uvicorn
 
 from .app import create_app
-from .config import Config, add_cli_args, config_from_args
+from .config import Config, add_cli_args, config_from_args, overrides_from_args
 from .transcriber import Transcriber, WhisperTranscriber
 
 GRACEFUL_SHUTDOWN_S = 10  # 終了時に途中の区間を確定させる猶予
@@ -33,7 +33,9 @@ def main() -> None:
         ap.error(str(e))
     print(f"[CONFIG] {args.config if args.config.exists() else '既定値'} を使用")
 
-    app = create_app(cfg, load_whisper)
+    app = create_app(
+        cfg, load_whisper, config_path=args.config, cli_overrides=overrides_from_args(args).keys()
+    )
     server = uvicorn.Server(
         uvicorn.Config(
             app,

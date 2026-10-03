@@ -124,3 +124,34 @@ def test_backlog_is_finalized_one_utterance_at_a_time():
         pytest.approx(d, abs=0.31) for d in (1.0, 1.5, 0.8)
     ]
     assert sum(voiced(a) for a in tr.finals) == voiced(audio)
+
+
+def test_reset_discards_pending_audio_but_keeps_time_and_context():
+    """一時停止: 区切り待ちの音声は捨て、停止中の音声は時間だけ進め、再開後の音声だけを認識する"""
+    s, tr = make_session()
+    feed(s, np.concatenate([tone(1.0), silence(1.0)]))  # 1 つ確定して文脈ができる
+    context = s.context
+    feed(s, tone(1.0))  # 区切り待ちの途中
+    assert len(s.buf) > 0
+
+    s.reset()
+    assert len(s.buf) == 0
+    s.skip(to_pcm(tone(2.0)))  # 停止中に届いた音声
+    n_calls = len(tr.finals)
+
+    after = np.concatenate([silence(0.5), tone(1.5, 330), silence(1.0)])
+    out = feed(s, after)
+
+    finals = [e for e in out if e.kind == "final"]
+    assert len(finals) == 1
+    assert voiced(tr.finals[n_calls]) == voiced(after)  # 停止前・停止中の音声は混ざらない
+    assert s.context == finals[0].text and context != ""
+    # 時刻: 2.0（最初の確定）+ 1.0（捨てた）+ 2.0（停止中）+ 0.5 = 5.5 秒から発話
+    assert finals[0].start == pytest.approx(5.5, abs=0.16)
+
+
+def test_set_speed_applies_to_thresholds():
+    s, _ = make_session(1.0)
+    s.set_speed(2.0)
+    assert s.min_silence == int(0.3 * SR)
+    assert s.max_len == int(MAX_SEGMENT_S / 2 * SR)

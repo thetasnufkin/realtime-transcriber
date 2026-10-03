@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import os
 import tomllib
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
+from typing import Any
+
+import tomli_w
 
 DEFAULT_CONFIG_PATH = Path("config.toml")
+EDITABLE_KEYS = ("model", "final_model", "speed", "glossary")  # ブラウザから変えられる設定
+SAVED_HEADER = "# ブラウザの設定画面から保存した値を含む。各項目の説明は config.example.toml を参照\n\n"
 
 
 @dataclass(frozen=True)
@@ -58,11 +64,28 @@ def add_cli_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--out-dir")
 
 
-def config_from_args(args: argparse.Namespace) -> Config:
-    cfg = load_config(args.config)
+def overrides_from_args(args: argparse.Namespace) -> dict[str, Any]:
+    """CLI で指定された設定だけを返す"""
     overrides = {
         f.name: getattr(args, f.name) for f in fields(Config) if getattr(args, f.name, None) is not None
     }
     if "glossary" in overrides:
         overrides["glossary"] = [w.strip() for w in overrides["glossary"].split(",") if w.strip()]
-    return replace(cfg, **overrides)
+    return overrides
+
+
+def config_from_args(args: argparse.Namespace) -> Config:
+    return replace(load_config(args.config), **overrides_from_args(args))
+
+
+def save_config(path: Path, updates: dict[str, Any]) -> None:
+    """config.toml に updates の項目だけを書き込む（他の項目はファイルの値を残す）。
+    コメントは残らないので、先頭に説明の場所を書いておく"""
+    data: dict[str, Any] = {}
+    if path.exists():
+        with path.open("rb") as f:
+            data = tomllib.load(f)
+    data.update(updates)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(SAVED_HEADER + tomli_w.dumps(data), encoding="utf-8")
+    os.replace(tmp, path)  # 書き込み途中で落ちても壊れたファイルを残さない

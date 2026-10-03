@@ -13,8 +13,13 @@ FRAME = 160  # 10ms
 class FakeTranscriber:
     """渡された音声を記録し、長さを表す文字列を返す"""
 
-    def __init__(self) -> None:
+    def __init__(self, name: str = "fake") -> None:
+        self.name = name
+        self.glossary: list[str] = []
         self.calls: list[tuple[bool, np.ndarray]] = []
+
+    def set_glossary(self, glossary: list[str]) -> None:
+        self.glossary = glossary
 
     def transcribe(self, audio: np.ndarray, context: str, final: bool) -> str:
         self.calls.append((final, audio.copy()))

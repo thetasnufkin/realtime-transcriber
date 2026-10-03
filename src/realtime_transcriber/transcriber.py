@@ -24,6 +24,10 @@ class Transcriber(Protocol):
         """audio（16kHz float32、通常速度）を認識する。final=True は確定用の高精度設定"""
         ...
 
+    def set_glossary(self, glossary: list[str]) -> None:
+        """用語集を差し替える（次の認識から使う）"""
+        ...
+
 
 def clean_text(text: str) -> str:
     text = REPEAT_RE.sub(r"\1", text.strip())
@@ -43,11 +47,14 @@ class WhisperTranscriber:
             self.final = WhisperModel(final_model, device="cuda", compute_type="float16")
         else:
             self.final = self.partial
-        self.hotwords = " ".join(glossary) or None
-        self.glossary_prompt = "、".join(glossary)
+        self.set_glossary(glossary)
         for final in (False, True):  # ウォームアップ
             self.transcribe(np.zeros(SR, dtype=np.float32), "", final=final)
         print("[MODEL] 準備完了")
+
+    def set_glossary(self, glossary: list[str]) -> None:
+        self.hotwords = " ".join(glossary) or None
+        self.glossary_prompt = "、".join(glossary)
 
     def transcribe(self, audio: np.ndarray, context: str, final: bool) -> str:
         prompt = "。".join(p for p in (self.glossary_prompt, context) if p) or None

@@ -34,12 +34,16 @@ class Session:
 
     def __init__(self, transcriber: Transcriber, speed: float, vad: Vad = get_speech_timestamps):
         self.tr = transcriber
-        self.speed = speed
         self.detect = vad
         self.buf = np.zeros(0, dtype=np.float32)
         self.consumed = 0  # buf の先頭が、ストリームの先頭から何サンプル目か
         self.since_partial = 0
         self.context = ""
+        self.set_speed(speed)
+
+    def set_speed(self, speed: float) -> None:
+        """再生速度を変える。溜まっている音声にもすぐ適用する"""
+        self.speed = speed
         # 倍速だと無音も短くなるので、判定の時間を速度で割る
         self.min_silence = int(MIN_SILENCE_S / speed * SR)
         self.max_len = int(MAX_SEGMENT_S / speed * SR)
@@ -58,6 +62,15 @@ class Session:
         x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
         self.buf = np.concatenate([self.buf, x])
         self.since_partial += len(x)
+
+    def reset(self) -> None:
+        """一時停止: 区切り待ちの途中の音声を捨てる。直前の文脈と経過時間は残す"""
+        self._drop(len(self.buf))
+        self.since_partial = 0
+
+    def skip(self, pcm: bytes) -> None:
+        """一時停止中に届いた音声: 認識せずに捨て、経過時間だけ進める（再開後の時刻をずらさない）"""
+        self.consumed += len(pcm) // 2
 
     def _best_gap(self, n: int) -> int:
         """上限に達したとき、単語の途中で切らないよう区間内で一番長い「間」の中央を返す"""

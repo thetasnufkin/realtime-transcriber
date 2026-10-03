@@ -11,6 +11,7 @@ dependencies = [
     "nvidia-cublas-cu12>=12.9.2.10",
     "nvidia-cudnn-cu12>=9,<10",
     "sounddevice>=0.5.6",
+    "tomli-w>=1.2.0",
     "uvicorn[standard]>=0.54.0",
     "websockets>=17.1",
 ]
@@ -26,6 +27,7 @@ build-backend = "uv_build"
 dev = [
     "httpx2>=2.13.1",
     "pytest>=9.1.1",
+    "pytest-timeout>=2.4.0",
     "ruff>=0.16.10",
 ]
 
@@ -38,3 +40,5 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
+timeout = 30  # 字幕を待ち続けて止まるテストを失敗にする（TestClient の待ちはシグナルで割り込めない）
+timeout_method = "thread"
