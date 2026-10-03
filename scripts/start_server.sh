@@ -10,8 +10,8 @@ if [ ! -f config.toml ]; then
   echo "[SETUP] config.example.toml から config.toml を作成しました（確定用モデル: large-v3）"
 fi
 
-# GPU のライブラリのパス（LD_LIBRARY_PATH）は activate で設定される
 source .venv/bin/activate
+source scripts/gpu_env.sh  # GPU のライブラリのパス（LD_LIBRARY_PATH）
 
 # 終了時の後片付け用に PID を残す（exec するので python がこの PID を引き継ぐ）。scripts/stop_server.sh が使う
 mkdir -p run

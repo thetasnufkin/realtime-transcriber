@@ -21,7 +21,7 @@ PC で再生中の音声（ブラウザ・動画・オンライン会議）や�
 - Windows 11 + WSL2 (Ubuntu 26.04)。リポジトリは WSL 側 `~/projects/realtime-transcriber`
 - GPU: RTX 3060 12GB（WSL から CUDA 利用可、nvcc なし。cuBLAS/cuDNN は pip の nvidia-* パッケージ）
 - Python 3.12（uv 管理）。**システムの Python 3.14 は使わない**
-- `source .venv/bin/activate` で `LD_LIBRARY_PATH` が設定される。`uv run` ではこれが効かないので、GPU を使うコマンドは activate 後に `python ...` で実行する
+- GPU を使うコマンドは `source .venv/bin/activate && source scripts/gpu_env.sh` の後に `python ...` で実行する（gpu_env.sh が pip の cuBLAS / cuDNN を `LD_LIBRARY_PATH` に足す。`uv run` ではこれが効かない。サーバーは scripts/start_server.sh が自動で行う）
 - Windows 側の Python は uv が用意する（`uv run capture_client.py`、PEP 723 のインラインメタデータで依存を宣言）
 - Windows の PowerShell 5.1 / cmd 用スクリプト（.ps1 / .bat）は **ASCII のみ**で書く（UTF-8 の日本語は文字化けして壊れる）。.bat は CRLF
 

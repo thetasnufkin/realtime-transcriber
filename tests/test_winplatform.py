@@ -124,6 +124,7 @@ def test_start_server_writes_its_pid(tmp_path: Path):
     """start_server.sh は exec する前に自分の PID（= python の PID）を書く"""
     (tmp_path / "scripts").mkdir()
     shutil.copy(ROOT / "scripts" / "start_server.sh", tmp_path / "scripts")
+    shutil.copy(ROOT / "scripts" / "gpu_env.sh", tmp_path / "scripts")
     shutil.copy(ROOT / "config.example.toml", tmp_path)
     # 偽の python（自分の PID を書いて終わる）を PATH の先頭に置く。
     # exec はシェル関数を呼べないので実行ファイルにする（本物のサーバーを起動しないように）
