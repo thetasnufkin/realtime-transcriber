@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import warnings
 from pathlib import Path
 
@@ -17,10 +18,12 @@ RESULTS = ROOT / "results" / "results.json"
 OUT_MD = ROOT / "results" / "RESULTS.md"
 OUT_PNG = ROOT / "results" / "speed_{mode}.png"
 # Linux 側に日本語フォントがないため Windows のものを使う
-FONT = Path("/mnt/c/Windows/Fonts/BIZ-UDGothicR.ttc")
+FONT = Path("/mnt/c/Windows/Fonts/YuGothM.ttc")  # 游ゴシック Medium（英数字もプロポーショナル）
 
 # 検証済みのパレット（ライト / ダークで段を変える。validate_palette.js で両方とも全項目 PASS）
 # 系列の色は方式に固定する（どの条件を表示しても同じ方式は同じ色）
+# ライトの 3 色目（#1baf7a）は面とのコントラストが 2.74:1 で WARN。
+# そのため同じ値の表を必ず併記する（RESULTS.md・README）
 THEMES = {
     "light": {
         "surface": "#fcfcfb", "ink": "#0b0b0b", "ink2": "#52514e", "muted": "#898781",
@@ -35,7 +38,7 @@ BASELINE = "kotoba + large-v3（既定）"
 # 倍速対応の方式: (キー, 表の表記, グラフの凡例)
 METHODS = [
     ("restore", "WSOLA で戻す", "WSOLA で通常の速さに戻す"),
-    ("segment", "区切りだけ", "区切りだけ速度に合わせる"),
+    ("segment", "区切りだけ", "区切りだけ速度に合わせる（採用）"),
     ("none", "なし", "倍速対応なし"),
 ]
 
@@ -142,6 +145,7 @@ def chart(results: list[dict], mode: str) -> Path | None:
     rows = speed_rows(results)
     if not rows:
         return None
+    logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)  # 游ゴシックの太さの代替の通知
     t = THEMES[mode]
     if FONT.exists():
         font_manager.fontManager.addfont(str(FONT))
@@ -170,7 +174,7 @@ def chart(results: list[dict], mode: str) -> Path | None:
             ax.bar(xs, ys, width, color=color, edgecolor=t["surface"], linewidth=2, label=label, zorder=3)
         ax.set_xticks(range(len(speeds)), [f"{s:g} 倍速" for s in speeds], color=t["ink2"])
         ax.set_title(title, loc="left", fontsize=11, color=t["ink"], pad=10)
-        ax.tick_params(axis="y", colors=t["muted"], labelsize=8)
+        ax.tick_params(axis="y", colors=t["muted"], labelsize=8, length=0)
         ax.tick_params(axis="x", length=0, labelsize=9)
         ax.yaxis.grid(True, color=t["grid"], linewidth=0.8, zorder=0)
         ax.yaxis.set_major_formatter(lambda v, _, u=unit: f"{v:g}{u}" if u == "%" else f"{v:g}")
