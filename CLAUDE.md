@@ -36,12 +36,22 @@ src/realtime_transcriber/     WSL。サーバー本体（python -m realtime_tran
   transcriber.py              Transcriber Protocol と faster-whisper 実装
   config.py                   既定値 < config.toml < CLI 引数
   static/                     ビューア（素の HTML/JS/CSS）
-scripts/start_server.sh       WSL。初回に config.toml を作り（確定用 large-v3）、venv を有効にして起動
+scripts/start_server.sh       WSL。初回に config.toml を作り（確定用 large-v3）、PID を run/ に記録して起動
+scripts/stop_server.sh        WSL。PID のコマンドラインを確かめてから止める（/api/shutdown で止まらないときの後片付け）
+windows/                      Windows。WSL のフォルダーから uv / uvw で直接実行する（PEP 723）
+  tray_app.py                 タスクトレイ常駐アプリ（pystray）。デスクトップのショートカットから uvw で起動
+  controller.py               起動・終了の手順（OS 非依存。Platform を偽物にして pytest）
+  winplatform.py              wsl.exe の起動（窓なし）、/api/health、二重起動防止（ミューテックス）
+  tray_view.py                状態 → アイコンの色・説明文・通知
+  capture.py                  WASAPI ループバックの取り込み（LoopbackStreamer。入力元は差し替え可能）
+  setup.bat / setup.ps1       ショートカットの作成（デスクトップ・スタートメニュー）。uninstall.bat で削除
 server/transcribe_server.py   互換シム（旧 start.bat 用）
-capture_client.py             Windows。WASAPI ループバックで再生音を取り込みサーバーへ送る
-start.bat                     Windows。サーバー起動 → 応答したらブラウザで字幕画面 → capture_client。どこに置いても動く
-tests/                        pytest（GPU 不要。偽の Transcriber と偽の VAD を使う）
+capture_client.py             Windows。windows/capture.py をコンソールで動かす薄い CLI
+start.bat                     Windows。コンソールを見ながら起動したいとき用（サーバー → ブラウザ → capture_client）
+tests/                        pytest（GPU 不要。偽の Transcriber・VAD・入力元・Platform を使う）
 ```
+
+ログ: トレイとサーバーの出力は `%LOCALAPPDATA%\realtime-transcriber\`（tray.log / server.log）。
 
 サーバーの処理: Silero VAD で発話区間を判定 → 発話中は 1 秒ごとに軽量モデルで暫定表示
 → 無音 0.6 秒 / 上限 20 秒（区間内の最長の「間」で切る）/ 入力途切れ で確定し、
@@ -64,11 +74,15 @@ tests/                        pytest（GPU 不要。偽の Transcriber と偽の
 ### Phase 2: ワンクリック起動
 - 目標: **cmd や PowerShell を一切触らず、デスクトップのアイコンのダブルクリックだけで起動から終了までできる**こと
 - Windows のタスクトレイ常駐アプリ（pystray）が次をまとめて行う
-  1. コンソール窓を出さずに WSL のサーバーを起動（`wsl.exe` を `CREATE_NO_WINDOW` で。トレイ自体は `uvw` / `pythonw`）
+  1. コンソール窓を出さずに WSL のサーバーを起動（`wsl.exe` を `CREATE_NO_WINDOW` で。トレイ自体は `uvw` / `pythonw`）。
+     すでにサーバーが動いていれば起動せずに使い回す
   2. ループバックの音声取り込みを開始
-  3. `/api/health` で準備完了を確認してから、ブラウザで字幕画面を開く
+  3. サーバーが応答したらすぐブラウザで字幕画面を開く（モデルの読み込み中は画面に「読み込み中」と出るので、
+     待たされている理由がわかる）。応答の確認には `/api/health` を使う（503 = 読み込み中でも応答とみなす）
   4. トレイの「終了」で `/api/shutdown` を呼び、取り込みと WSL のプロセスを含めて全部止める
+     （使い回したサーバーも止める）
 - デスクトップとスタートメニューにショートカットを作るセットアップを用意する（.ps1 は ASCII のみ）
+- ログイン時の自動起動は入れない（GPU メモリを約 8GB 使うので、使うときだけ起動する）
 
 ### Phase 3: 評価とアピール
 - `bench/` に評価ハーネス: 正解テキスト付きの音声で CER（文字誤り率）、確定までの遅延、RTF を計測

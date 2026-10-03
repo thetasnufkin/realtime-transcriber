@@ -60,6 +60,7 @@ def test_pause_discards_pending_audio_and_audio_while_paused(tmp_path: Path):
             partial = receive_until(viewer, lambda m: m["type"] == "partial")[-1]
 
             assert client.post("/api/pause").json() == {"paused": True}
+            assert client.get("/api/health").json()["paused"] is True  # トレイはここで一時停止を知る
             msgs = receive_until(viewer, lambda m: m["type"] == "status" and m.get("paused"))
             assert {"type": "clear", "source": partial["source"]} in msgs  # 暫定表示を消す
 

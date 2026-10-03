@@ -3,7 +3,7 @@
 GET  /              字幕ビューア
 WS   /ingest        16kHz mono int16 PCM を受け取る（WS / も旧クライアント用の別名）
 WS   /captions      暫定 / 確定テキストと状態を JSON で配信
-GET  /api/health    認識できる状態なら 200、読み込み中・失敗なら 503
+GET  /api/health    認識できる状態なら 200、読み込み中・失敗なら 503（一時停止中かも返す）
 GET  /api/config    ブラウザから変えられる設定
 PUT  /api/config    設定を変えて config.toml に保存（モデルは裏で読み込んでから切り替える）
 POST /api/pause     一時停止（区切り待ちの途中の音声も捨てる）
@@ -127,7 +127,8 @@ def create_app(
     @app.get("/api/health")
     async def health() -> JSONResponse:
         state = hub.status["model_state"]
-        return JSONResponse({"status": state}, status_code=200 if state in READY_STATES else 503)
+        body = {"status": state, "paused": hub.status["paused"]}  # paused はトレイの表示用
+        return JSONResponse(body, status_code=200 if state in READY_STATES else 503)
 
     @app.get("/api/config")
     async def get_config() -> dict[str, Any]:

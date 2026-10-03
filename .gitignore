@@ -3,3 +3,4 @@ transcripts/
 __pycache__/
 config.toml
 *:Zone.Identifier
+run/
