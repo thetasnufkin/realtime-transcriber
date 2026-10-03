@@ -21,8 +21,8 @@ def test_cer():
 
 
 def test_term_recall():
-    assert term_recall(["東雲電機", "汐留第二開発課"], "東雲電機の汐留第二開発課です") == 1.0
-    assert term_recall(["東雲電機", "汐留第二開発課"], "しののめ電機の DX 推進部です") == 0.5
+    assert term_recall(["東雲電機", "AI研究室"], "東雲電機のＡＩ研究室です") == 1.0  # 全角英字も揃える
+    assert term_recall(["東雲電機", "AI研究室"], "しののめ電機の AI 研究室です") == 0.5
 
 
 def test_build_stream_places_utterances_with_gaps():
@@ -139,7 +139,7 @@ def test_report_tables_and_charts(tmp_path, monkeypatch):
         {**base, "name": "2 倍速・区切りだけ対応", "group": "speed", "speed": 2.0, "stretch": False,
          "cer": 0.05, "latency_p50_s": 1.1},
         {**base, "name": "用語集あり", "group": "glossary", "dataset": "glossary", "utterances": 12,
-         "cer": 0.03, "term_recall": 0.9},
+         "cer": 0.03, "term_recall": 0.9, "term_recall_range": [0.8, 1.0], "cer_range": [0.02, 0.04]},
     ]  # fmt: skip
     monkeypatch.setattr(report, "RESULTS", tmp_path / "results.json")
     monkeypatch.setattr(report, "OUT_MD", tmp_path / "RESULTS.md")
@@ -153,6 +153,6 @@ def test_report_tables_and_charts(tmp_path, monkeypatch):
     assert "| 2 倍 | WSOLA で戻す | 6.0% |" in md
     assert "| 2 倍 | 区切りだけ | 5.0% |" in md
     assert "| 2 倍 | なし | 20.0% | 2.50 秒 |" in md
-    assert "| 用語集あり | 90.0% | 3.0% |" in md
+    assert "| 用語集あり | 90.0%（80.0%〜100.0%） | 3.0%（2.0%〜4.0%） |" in md
     for mode in ("light", "dark"):
         assert (tmp_path / f"speed_{mode}.png").stat().st_size > 10_000

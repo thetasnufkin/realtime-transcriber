@@ -12,6 +12,8 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import random
+import statistics
 import subprocess
 import time
 from dataclasses import asdict, dataclass
@@ -36,6 +38,9 @@ GLOSSARY_AUDIO = ROOT / "data" / "glossary"
 KOTOBA = Config().model
 LARGE = "large-v3"
 DEFAULT_N = 100
+# 用語集の効果は用語の並び順（プロンプトと hotwords の並び）で揺れる（12 文の評価で正答率 18〜36%）。
+# 1 回の測定で結論を出さないよう、並び順を変えて測り平均と範囲を出す
+GLOSSARY_ORDERS = 5
 
 
 @dataclass(frozen=True)
@@ -104,28 +109,41 @@ def gpu_name() -> str:
 
 
 def run_case(case: Case, stream: Stream, tr: WhisperTranscriber, terms: list[str]) -> dict:
-    tr.set_glossary(terms if case.glossary else [])
     played = speed_up(stream, case.speed)
-    session = Session(tr, case.speed if case.speed_aware else 1.0, stretch=case.stretch)
+    orders = [terms[:] for _ in range(GLOSSARY_ORDERS)] if case.glossary else [[]]
+    for seed, order in enumerate(orders):
+        random.Random(seed).shuffle(order)
+    runs = []
     t0 = time.perf_counter()
-    r = simulate(session, played.audio)
+    for order in orders:
+        tr.set_glossary(order)
+        session = Session(tr, case.speed if case.speed_aware else 1.0, stretch=case.stretch)
+        runs.append(simulate(session, played.audio))
     wall = time.perf_counter() - t0
+    r = runs[0]  # 認識結果の全文と遅延は 1 回目のもの
     p50, p90 = r.latency_percentiles(50, 90)
+    cers = [cer(stream.reference, x.hypothesis) for x in runs]
     result = {
         **asdict(case),
         "utterances": len(stream.segments),
         "audio_min": round(played.duration / 60, 2),
-        "cer": round(cer(stream.reference, r.hypothesis), 4),
+        "cer": round(statistics.mean(cers), 4),
         "latency_p50_s": round(p50, 2),
         "latency_p90_s": round(p90, 2),
         "rtf": round(r.rtf, 3),
         "finals": len(r.finals),
+        "runs": len(runs),
         "wall_s": round(wall, 1),
         "gpu": gpu_name(),
         "date": dt.date.today().isoformat(),
     }
+    if len(runs) > 1:
+        result["cer_range"] = [round(min(cers), 4), round(max(cers), 4)]
     if case.dataset == "glossary":
-        result["term_recall"] = round(term_recall(terms, r.hypothesis), 3)
+        recalls = [term_recall(terms, x.hypothesis) for x in runs]
+        result["term_recall"] = round(statistics.mean(recalls), 3)
+        if len(runs) > 1:
+            result["term_recall_range"] = [round(min(recalls), 3), round(max(recalls), 3)]
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / f"{case.name}.txt").write_text(
         "\n".join(e.event.text for e in r.finals) + "\n", encoding="utf-8"

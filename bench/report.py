@@ -71,6 +71,12 @@ def row(cells: list[str]) -> str:
     return "| " + " | ".join(cells) + " |"
 
 
+def with_range(r: dict, key: str) -> str:
+    """平均と、複数回測ったときの範囲"""
+    lo_hi = r.get(f"{key}_range")
+    return pct(r[key]) + (f"（{pct(lo_hi[0])}〜{pct(lo_hi[1])}）" if lo_hi else "")
+
+
 def timing(r: dict) -> list[str]:
     return [f"{r['latency_p50_s']:.2f} 秒", f"{r['latency_p90_s']:.2f} 秒", f"{r['rtf']:.2f}"]
 
@@ -125,12 +131,13 @@ def markdown(results: list[dict]) -> str:
             "",
             f"架空の社名・部署名を含む自作の {gloss[0]['utterances']} 文を"
             " Windows の音声合成（Haruka）で読み上げたもの（`bench/glossary/sentences.tsv`）。"
-            "用語の正答率は、用語が正しい表記で出てきた割合。",
+            "用語の正答率は、用語が正しい表記で出てきた割合。用語集の効果は用語の並び順で揺れるので、"
+            "用語集ありは並び順を変えて 5 回測った平均（括弧内は最小〜最大）。",
             "",
             "| 条件 | 用語の正答率 | CER |",
             "|---|---:|---:|",
         ]
-        lines += [row([r["name"], pct(r["term_recall"]), pct(r["cer"])]) for r in gloss]
+        lines += [row([r["name"], with_range(r, "term_recall"), with_range(r, "cer")]) for r in gloss]
         lines.append("")
     return "\n".join(lines)
 
