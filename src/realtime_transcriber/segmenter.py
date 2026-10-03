@@ -98,6 +98,10 @@ class Session:
         cut = None
         if force:
             cut = n
+        elif len(speech) > 1:
+            # 認識が追いつかず複数の発話が溜まっているときは、最初の発話だけを確定する
+            # （まとめて確定すると、文がつながった長い字幕になる）
+            cut = speech[0]["end"]
         elif n - last_end >= self.min_silence:
             cut = last_end
         elif n >= self.max_len:

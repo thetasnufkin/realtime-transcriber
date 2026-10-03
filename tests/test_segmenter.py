@@ -107,3 +107,20 @@ def test_max_length_cuts_at_a_gap(speed: float):
         assert sum(voiced(a) for a in tr.finals) == voiced(audio)
         for a in tr.finals[:-1]:
             assert not a[-int(0.05 * SR) :].any()  # 発話の途中ではなく間で切れている
+
+
+def test_backlog_is_finalized_one_utterance_at_a_time():
+    """認識が遅れて複数の発話が一度に届いても、1 発話ずつ確定する"""
+    s, tr = make_session()
+    audio = np.concatenate([tone(1.0), silence(1.0), tone(1.5, 330), silence(1.0), tone(0.8), silence(1.0)])
+    s.add(to_pcm(audio))  # まとめて届く
+    out = []
+    for _ in range(5):
+        out += s.step()
+
+    finals = [e for e in out if e.kind == "final"]
+    assert len(finals) == 3
+    assert [round(f.end - f.start, 1) for f in finals] == [
+        pytest.approx(d, abs=0.31) for d in (1.0, 1.5, 0.8)
+    ]
+    assert sum(voiced(a) for a in tr.finals) == voiced(audio)
