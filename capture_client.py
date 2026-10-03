@@ -2,97 +2,41 @@
 # requires-python = "==3.12.*"
 # dependencies = ["pyaudiowpatch", "numpy", "soxr", "websockets"]
 # ///
-"""capture_client.py  (Windows 側で動かす)
+"""capture_client.py  (Windows 側で動かす。コンソールに状態を表示する版)
 
-Windows で今鳴っている音（ブラウザ・動画・会議アプリなど）を WASAPI ループバックで
-直接キャプチャし、16kHz / mono / int16 に変換して WSL の文字起こしサーバーへ送る。
-マイクは使わない。サーバーが起動していなければ、準備できるまで自動で再接続を繰り返す。
+再生中の音を取り込んでサーバーへ送る。処理の本体は windows/capture.py。
+タスクトレイから使う場合は windows/tray_app.py。
 
   uv run capture_client.py
   uv run capture_client.py --url ws://localhost:9000/ingest   # ポートを変えた場合
 """
+
 import argparse
-import queue
-import time
+import sys
+from pathlib import Path
 
-import numpy as np
-import pyaudiowpatch as pyaudio
-import soxr
-from websockets.exceptions import ConnectionClosed, InvalidHandshake
-from websockets.sync.client import connect
+sys.path.insert(0, str(Path(__file__).resolve().parent / "windows"))
 
-TARGET_SR = 16000
-RETRY_S = 2.0
+from capture import LoopbackStreamer  # noqa: E402
 
 
-def find_loopback(p: pyaudio.PyAudio) -> dict:
-    """既定の再生デバイス（スピーカー/ヘッドホン）に対応するループバックデバイスを探す"""
-    wasapi = p.get_host_api_info_by_type(pyaudio.paWASAPI)
-    speaker = p.get_device_info_by_index(wasapi["defaultOutputDevice"])
-    if speaker.get("isLoopbackDevice"):
-        return speaker
-    for lb in p.get_loopback_device_info_generator():
-        if speaker["name"] in lb["name"]:
-            return lb
-    raise RuntimeError(f"ループバックデバイスが見つかりません（再生デバイス: {speaker['name']}）")
-
-
-def drain(q: queue.Queue) -> None:
-    """接続していない間に溜まった古い音声を捨てる"""
-    while True:
-        try:
-            q.get_nowait()
-        except queue.Empty:
-            return
+def show(state: str, detail: str) -> None:
+    if state == "device":
+        print(f"[CAPTURE] {detail}")
+    elif state == "streaming":
+        print(f"\n[WS] {detail} に接続しました。音声を再生してください（Ctrl+C で終了）")
+    elif state == "waiting":
+        print(f"[WS] サーバー待ち... ({detail})", end="\r", flush=True)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default="ws://localhost:8765/ingest")
     args = ap.parse_args()
-
-    p = pyaudio.PyAudio()
-    dev = find_loopback(p)
-    rate, ch = int(dev["defaultSampleRate"]), dev["maxInputChannels"]
-
-    q: queue.Queue[bytes] = queue.Queue()
-
-    def callback(data, frame_count, time_info, status):
-        q.put(data)
-        return (None, pyaudio.paContinue)
-
-    stream = p.open(
-        format=pyaudio.paInt16, channels=ch, rate=rate, input=True,
-        input_device_index=dev["index"], frames_per_buffer=int(rate * 0.1),
-        stream_callback=callback,
-    )
-    print(f"[CAPTURE] {dev['name']} ({rate}Hz, {ch}ch)")
-
     try:
-        while True:  # 接続が切れたら再接続する
-            try:
-                with connect(args.url, max_size=None, open_timeout=3) as ws:
-                    print(f"[WS] {args.url} に接続しました。音声を再生してください（Ctrl+C で終了）")
-                    drain(q)
-                    resampler = soxr.ResampleStream(rate, TARGET_SR, 1, dtype="float32")
-                    while True:
-                        try:
-                            data = q.get(timeout=0.5)  # 無音時はパケットが来ないことがある
-                        except queue.Empty:
-                            continue
-                        x = np.frombuffer(data, dtype=np.int16).reshape(-1, ch).mean(axis=1)
-                        y = resampler.resample_chunk((x / 32768.0).astype(np.float32))
-                        if len(y):
-                            ws.send((np.clip(y, -1, 1) * 32767).astype(np.int16).tobytes())
-            except (OSError, TimeoutError, ConnectionClosed, InvalidHandshake):
-                print(f"[WS] サーバー待ち... ({args.url})", end="\r", flush=True)
-                time.sleep(RETRY_S)
+        LoopbackStreamer(args.url, on_state=show).run()
     except KeyboardInterrupt:
         print("\n終了しました")
-    finally:
-        stream.stop_stream()
-        stream.close()
-        p.terminate()
 
 
 if __name__ == "__main__":

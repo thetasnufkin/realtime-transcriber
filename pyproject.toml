@@ -29,6 +29,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-timeout>=2.4.0",
     "ruff>=0.16.10",
+    "soxr>=1.1.0",
 ]
 
 [tool.ruff]
@@ -39,6 +40,6 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests"]
+pythonpath = ["tests", "windows"]
 timeout = 30  # 字幕を待ち続けて止まるテストを失敗にする（TestClient の待ちはシグナルで割り込めない）
 timeout_method = "thread"
