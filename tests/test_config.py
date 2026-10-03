@@ -53,6 +53,8 @@ def test_cli_overrides_toml_only_where_given(tmp_path: Path):
         'glossary = "東雲電機"\n',
         "port = 0\n",
         "speed = \n",  # TOML の文法エラー
+        'speed_restore = "no"\n',
+        "speed_restore = 0\n",
     ],
 )
 def test_invalid_config_is_rejected(tmp_path: Path, text: str):

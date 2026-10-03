@@ -21,7 +21,7 @@ PC で再生中の音声（ブラウザ・動画・オンライン会議）や�
 - Windows 11 + WSL2 (Ubuntu 26.04)。リポジトリは WSL 側 `~/projects/realtime-transcriber`
 - GPU: RTX 3060 12GB（WSL から CUDA 利用可、nvcc なし。cuBLAS/cuDNN は pip の nvidia-* パッケージ）
 - Python 3.12（uv 管理）。**システムの Python 3.14 は使わない**
-- `source .venv/bin/activate` で `LD_LIBRARY_PATH` が設定される。`uv run` ではこれが効かないので、GPU を使うコマンドは activate 後に `python ...` で実行する
+- GPU を使うコマンドは `source .venv/bin/activate && source scripts/gpu_env.sh` の後に `python ...` で実行する（gpu_env.sh が pip の cuBLAS / cuDNN を `LD_LIBRARY_PATH` に足す。`uv run` ではこれが効かない。サーバーは scripts/start_server.sh が自動で行う）
 - Windows 側の Python は uv が用意する（`uv run capture_client.py`、PEP 723 のインラインメタデータで依存を宣言）
 - Windows の PowerShell 5.1 / cmd 用スクリプト（.ps1 / .bat）は **ASCII のみ**で書く（UTF-8 の日本語は文字化けして壊れる）。.bat は CRLF
 
@@ -48,6 +48,9 @@ windows/                      Windows。WSL のフォルダーから uv / uvw �
 server/transcribe_server.py   互換シム（旧 start.bat 用）
 capture_client.py             Windows。windows/capture.py をコンソールで動かす薄い CLI
 start.bat                     Windows。コンソールを見ながら起動したいとき用（サーバー → ブラウザ → capture_client）
+bench/                        評価ハーネス（python -m bench.run → python -m bench.report）。FLEURS と用語集セットで
+                              CER・遅延・RTF を測る。結果は bench/results/（音声は bench/data/ でコミットしない）
+docs/                         構成図（architecture.md、README に載せる）とデモ GIF
 tests/                        pytest（GPU 不要。偽の Transcriber・VAD・入力元・Platform を使う）
 ```
 
@@ -55,8 +58,10 @@ tests/                        pytest（GPU 不要。偽の Transcriber・VAD・�
 
 サーバーの処理: Silero VAD で発話区間を判定 → 発話中は 1 秒ごとに軽量モデルで暫定表示
 → 無音 0.6 秒 / 上限 20 秒（区間内の最長の「間」で切る）/ 入力途切れ で確定し、
-高精度モデル（任意で large-v3）で認識。倍速再生は WSOLA で通常速度に戻してから認識。
-直前の確定文と用語集をプロンプトと hotwords に渡す。繰り返しの暴走と定番の幻聴フレーズは除去。
+高精度モデル（任意で large-v3）で認識。倍速再生は無音の判定時間を速度で割り、音声は倍速のまま認識する
+（WSOLA で戻すと CER が倍以上に悪化したため。speed_restore = true で戻す）。
+直前の確定文と用語集をプロンプトと hotwords に渡す（蒸留モデルの kotoba-whisper には渡さない。文の途中で止まるため）。
+繰り返しの暴走と定番の幻聴フレーズは除去。
 
 ## 目標アーキテクチャ（ロードマップ）
 
@@ -84,7 +89,10 @@ tests/                        pytest（GPU 不要。偽の Transcriber・VAD・�
 - デスクトップとスタートメニューにショートカットを作るセットアップを用意する（.ps1 は ASCII のみ）
 - ログイン時の自動起動は入れない（GPU メモリを約 8GB 使うので、使うときだけ起動する）
 
-### Phase 3: 評価とアピール
+### Phase 3: 評価とアピール（実施済み。結果は bench/results/RESULTS.md と README）
+- 実施: kotoba-whisper のみ / kotoba + large-v3、倍速 1x/1.5x/2x × 倍速対応 3 方式、用語集の有無。
+  ReazonSpeech は faster-whisper の形式で使えないため未実施
+- 評価で見つけて直したこと: WSOLA で戻すのをやめた（speed_restore の既定 false）、蒸留モデルにプロンプトを渡さない
 - `bench/` に評価ハーネス: 正解テキスト付きの音声で CER（文字誤り率）、確定までの遅延、RTF を計測
 - 比較軸: モデル（kotoba-whisper v2.0 / large-v3 / ReazonSpeech など）、倍速 1x/1.5x/2x と WSOLA の有無、用語集の有無
 - 結果を README に表とグラフで載せる。CER は句読点・空白を除いて正規化してから計算する

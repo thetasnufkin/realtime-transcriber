@@ -248,7 +248,7 @@ def create_app(
         def add(chunk: bytes, arrived_paused: bool) -> None:
             if ing.session is None:
                 assert tr is not None  # reader は準備後の音声だけを渡す
-                ing.session = Session(tr, cfg.speed, vad)
+                ing.session = Session(tr, cfg.speed, vad, stretch=cfg.speed_restore)
                 ing.offset = hub.elapsed()
             # 届いた時点か今のどちらかで停止中なら捨てる（再開の直前に届いた停止中の音声も混ぜない）
             if arrived_paused or paused:

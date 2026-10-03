@@ -101,8 +101,9 @@ def test_max_length_cuts_at_a_gap(speed: float):
     assert all(a.end <= b.start + 1e-9 for a, b in zip(finals, finals[1:], strict=False))
     assert finals[-1].end <= len(audio) / SR
     for a in tr.finals[:-1]:  # 最後は無音で切れた区間
-        assert len(a) <= (MAX_SEGMENT_S + 0.5) * SR  # time_stretch 後の長さ = 通常速度換算
-        assert len(a) >= 0.3 * MAX_SEGMENT_S * SR
+        normal = len(a) * speed  # 倍速のまま認識に渡すので、通常速度に換算する
+        assert normal <= (MAX_SEGMENT_S + 0.5) * SR
+        assert normal >= 0.3 * MAX_SEGMENT_S * SR
     if speed == 1.0:
         assert sum(voiced(a) for a in tr.finals) == voiced(audio)
         for a in tr.finals[:-1]:
@@ -155,3 +156,19 @@ def test_set_speed_applies_to_thresholds():
     s.set_speed(2.0)
     assert s.min_silence == int(0.3 * SR)
     assert s.max_len == int(MAX_SEGMENT_S / 2 * SR)
+
+
+@pytest.mark.parametrize("stretch", [True, False])
+def test_stretch_only_changes_the_audio_given_to_the_model(stretch: bool):
+    """stretch=False でも区切り（無音の判定）は速度に合わせ、認識には倍速の音声のまま渡す"""
+    tr = FakeTranscriber()
+    s = Session(tr, 2.0, vad=energy_vad, stretch=stretch)
+    # 0.4 秒の間は 2 倍速の区切り（0.3 秒）より長い → 2 つの区間に分かれる
+    out = feed(s, np.concatenate([tone(1.0), silence(0.4), tone(1.0), silence(1.0)]))
+    assert [e.kind for e in out if e.kind == "final"] == ["final", "final"]
+    assert s.min_silence == int(0.3 * SR)
+    first = len(tr.finals[0]) / SR
+    if stretch:
+        assert first > 1.6  # 2 倍速の約 1.1 秒の区間が、通常の速さ（約 2 倍）に戻っている
+    else:
+        assert first < 1.4  # 倍速のまま
