@@ -171,18 +171,20 @@
     "final_model": "large-v3",
     "speed": 1.0,
     "speed_aware": true,
+    "stretch": true,
     "glossary": false,
     "utterances": 12,
-    "audio_min": 1.44,
-    "cer": 0.1988,
+    "audio_min": 1.43,
+    "cer": 0.2108,
     "latency_p50_s": 1.33,
-    "latency_p90_s": 1.55,
-    "rtf": 0.336,
+    "latency_p90_s": 1.41,
+    "rtf": 0.333,
     "finals": 12,
-    "wall_s": 29.1,
+    "runs": 1,
+    "wall_s": 28.7,
     "gpu": "NVIDIA GeForce RTX 3060",
     "date": "2026-10-03",
-    "term_recall": 0.091
+    "term_recall": 0.0
   },
   {
     "name": "用語集あり",
@@ -192,17 +194,27 @@
     "final_model": "large-v3",
     "speed": 1.0,
     "speed_aware": true,
+    "stretch": true,
     "glossary": true,
     "utterances": 12,
-    "audio_min": 1.44,
-    "cer": 0.1235,
-    "latency_p50_s": 1.42,
-    "latency_p90_s": 1.59,
-    "rtf": 0.336,
+    "audio_min": 1.43,
+    "cer": 0.1512,
+    "latency_p50_s": 1.47,
+    "latency_p90_s": 1.6,
+    "rtf": 0.357,
     "finals": 12,
-    "wall_s": 29.0,
+    "runs": 5,
+    "wall_s": 152.2,
     "gpu": "NVIDIA GeForce RTX 3060",
     "date": "2026-10-03",
-    "term_recall": 0.455
+    "cer_range": [
+      0.1416,
+      0.1596
+    ],
+    "term_recall": 0.309,
+    "term_recall_range": [
+      0.273,
+      0.364
+    ]
   }
 ]
