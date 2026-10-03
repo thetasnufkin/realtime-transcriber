@@ -10,12 +10,28 @@
   <header>
     <h1>リアルタイム字幕</h1>
     <p id="status" class="status" data-state="offline" role="status">サーバーに接続中…</p>
+    <div class="toolbar">
+      <label class="toggle">
+        <input id="autoscroll" type="checkbox" checked>
+        自動スクロール
+      </label>
+      <div class="group" role="group" aria-label="文字サイズ">
+        <button id="smaller" type="button" aria-label="文字を小さく">A−</button>
+        <output id="size" aria-live="polite"></output>
+        <button id="larger" type="button" aria-label="文字を大きく">A+</button>
+      </div>
+      <div class="group" role="group" aria-label="ダウンロード">
+        <a class="button" href="/api/transcript.txt" download title="確定文をテキストで保存">TXT</a>
+        <a class="button" href="/api/transcript.srt" download title="確定文を字幕ファイル (SRT) で保存">SRT</a>
+      </div>
+    </div>
   </header>
   <main id="scroller">
     <p id="empty" class="empty">音声を再生すると、ここに字幕が表示されます。</p>
     <ol id="finals" class="captions"></ol>
     <ol id="partials" class="captions" aria-live="polite"></ol>
   </main>
+  <button id="jump" class="jump" type="button" hidden>↓ 最新へ</button>
   <script src="/static/app.js"></script>
 </body>
 </html>

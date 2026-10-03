@@ -4,6 +4,7 @@ GET  /              字幕ビューア
 WS   /ingest        16kHz mono int16 PCM を受け取る（WS / も旧クライアント用の別名）
 WS   /captions      暫定 / 確定テキストを JSON で配信
 GET  /api/health    モデルの準備ができていれば 200、読み込み中・失敗なら 503
+GET  /api/transcript.txt, .srt  確定文のダウンロード
 POST /api/shutdown  サーバーを終了する（途中の区間は確定させてから止まる）
 """
 
@@ -18,11 +19,12 @@ from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from faster_whisper.vad import get_speech_timestamps
 
 from .config import Config
+from .export import to_srt, to_txt
 from .hub import Hub
 from .segmenter import Session, Vad
 from .transcriber import Transcriber
@@ -80,6 +82,19 @@ def create_app(
     async def health() -> JSONResponse:
         state = hub.status["model_state"]
         return JSONResponse({"status": state}, status_code=200 if state == "ready" else 503)
+
+    @app.get("/api/transcript.{fmt}")
+    async def transcript(fmt: str) -> PlainTextResponse:
+        if fmt not in ("txt", "srt"):
+            return PlainTextResponse("txt か srt を指定してください", status_code=404)
+        body = to_txt(hub.captions) if fmt == "txt" else to_srt(hub.captions)
+        # ファイル名はサーバー起動時の transcripts/ のファイルと揃える
+        filename = f"{hub.path.stem}.{fmt}"
+        return PlainTextResponse(
+            body,
+            media_type="application/x-subrip" if fmt == "srt" else "text/plain",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     @app.post("/api/shutdown")
     async def shutdown() -> JSONResponse:

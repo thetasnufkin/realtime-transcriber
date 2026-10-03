@@ -111,6 +111,15 @@ def test_audio_becomes_captions_for_every_viewer(tmp_path: Path, path: str):
             history = late.receive_json()
             assert [c["text"] for c in history["captions"]] == [f["text"]]
 
+        # ダウンロード
+        txt = client.get("/api/transcript.txt")
+        assert txt.headers["content-disposition"].endswith('.txt"')
+        assert txt.text == f"[{f['at']}] {f['text']}\n"
+        srt = client.get("/api/transcript.srt")
+        assert srt.headers["content-type"].startswith("application/x-subrip")
+        assert srt.text.startswith("1\n00:00:00,") and f["text"] in srt.text
+        assert client.get("/api/transcript.csv").status_code == 404
+
         saved = list(tmp_path.glob("*.txt"))
         assert len(saved) == 1 and f["text"] in saved[0].read_text(encoding="utf-8")
 

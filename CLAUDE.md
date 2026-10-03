@@ -31,6 +31,7 @@ PC で再生中の音声（ブラウザ・動画・オンライン会議）や�
 src/realtime_transcriber/     WSL。サーバー本体（python -m realtime_transcriber で起動）
   app.py                      FastAPI: GET / (ビューア), WS /ingest (WS / は旧クライアント用), WS /captions, /api/*
   hub.py                      確定文の履歴・閲覧者への配信・transcripts/ への保存
+  export.py                   確定文の TXT / SRT 書き出し（/api/transcript.txt, .srt）
   segmenter.py                VAD で区切り、暫定/確定の Event（時刻付き）を出す
   transcriber.py              Transcriber Protocol と faster-whisper 実装
   config.py                   既定値 < config.toml < CLI 引数

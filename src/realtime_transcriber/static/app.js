@@ -6,20 +6,89 @@ const finals = document.getElementById("finals");
 const partials = document.getElementById("partials");
 const statusEl = document.getElementById("status");
 const emptyEl = document.getElementById("empty");
+const autoScrollEl = document.getElementById("autoscroll");
+const sizeEl = document.getElementById("size");
+const smallerEl = document.getElementById("smaller");
+const largerEl = document.getElementById("larger");
+const jumpEl = document.getElementById("jump");
 
 const RECONNECT_MS = 1500;
+const FONT_SIZES = [16, 18, 20, 22, 26, 30, 36, 44, 52, 64]; // px
+const DEFAULT_FONT_SIZE = 22;
 const partialBySource = new Map(); // 入力ごとの暫定行
+
+// 表示の好みはこのブラウザだけに保存する（保存できない環境でも動くようにする）
+const prefs = {
+  get(key, fallback) {
+    try {
+      const v = localStorage.getItem(`viewer.${key}`);
+      return v === null ? fallback : JSON.parse(v);
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(`viewer.${key}`, JSON.stringify(value));
+    } catch {
+      // 保存できなくても表示には影響しない
+    }
+  },
+};
+
+// --- 文字サイズ ---
+let fontSize = FONT_SIZES.includes(prefs.get("fontSize")) ? prefs.get("fontSize") : DEFAULT_FONT_SIZE;
+
+function applyFontSize() {
+  document.documentElement.style.setProperty("--caption-size", `${fontSize}px`);
+  sizeEl.textContent = fontSize;
+  smallerEl.disabled = fontSize === FONT_SIZES[0];
+  largerEl.disabled = fontSize === FONT_SIZES.at(-1);
+  prefs.set("fontSize", fontSize);
+}
+
+function stepFontSize(delta) {
+  const follow = autoScrollEl.checked && nearBottom();
+  const i = FONT_SIZES.indexOf(fontSize) + delta;
+  fontSize = FONT_SIZES[Math.min(Math.max(i, 0), FONT_SIZES.length - 1)];
+  applyFontSize();
+  if (follow) scrollToBottom();
+}
+
+smallerEl.addEventListener("click", () => stepFontSize(-1));
+largerEl.addEventListener("click", () => stepFontSize(+1));
+applyFontSize();
+
+// --- 自動スクロール ---
+autoScrollEl.checked = prefs.get("autoScroll", true);
+autoScrollEl.addEventListener("change", () => {
+  prefs.set("autoScroll", autoScrollEl.checked);
+  if (autoScrollEl.checked) scrollToBottom();
+});
 
 function nearBottom() {
   return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
 }
 
-// 一番下を見ているときだけ追従する（読み返し中はスクロールを奪わない）
+function scrollToBottom() {
+  scroller.scrollTop = scroller.scrollHeight;
+  updateJump();
+}
+
+function updateJump() {
+  jumpEl.hidden = nearBottom();
+}
+
+scroller.addEventListener("scroll", updateJump);
+jumpEl.addEventListener("click", scrollToBottom);
+
+// 自動スクロールが ON で、一番下を見ているときだけ追従する（読み返し中はスクロールを奪わない）
 function withAutoScroll(update) {
-  const follow = nearBottom();
+  const follow = autoScrollEl.checked && nearBottom();
   update();
   emptyEl.hidden = finals.children.length + partials.children.length > 0;
-  if (follow) scroller.scrollTop = scroller.scrollHeight;
+  if (follow) scrollToBottom();
+  else updateJump();
 }
 
 function line(text, at) {
