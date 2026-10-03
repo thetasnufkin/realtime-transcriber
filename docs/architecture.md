@@ -1,21 +1,27 @@
 # アーキテクチャ
 
-> Phase 1（Web UI 化）完了時点の構成。実装が変わったらこの図も更新する。
+> Phase 2（ワンクリック起動）完了時点の構成。実装が変わったらこの図も更新する。
 
 PC で再生中の音声を、外部に一切送らずにローカルの GPU でリアルタイムに文字起こしする。
-処理は Windows 側（音声の取り込み）と WSL2 側（文字起こし・Web UI）に分かれ、
-両者は PC の中だけで閉じた WebSocket（`127.0.0.1:8765`）でつながっている。
+処理は Windows 側（タスクトレイ常駐アプリ・音声の取り込み）と WSL2 側（文字起こし・Web UI）に分かれ、
+両者は PC の中だけで閉じた WebSocket / HTTP（`127.0.0.1:8765`）でつながっている。
+使う人はデスクトップの「リアルタイム字幕」をダブルクリックするだけで、cmd や PowerShell は触らない。
 
 ## 全体構成
 
 ```mermaid
 flowchart TB
     subgraph WIN["Windows 11"]
+        LNK["デスクトップの<br/>ショートカット"]
+        TRAY["tray_app.py（タスクトレイ・uvw で窓なし）<br/>起動・状態の表示・終了（controller.py）"]
         SRC["再生中の音声<br/>（ブラウザ・動画・会議アプリ）"]
         LOOP["WASAPI ループバック<br/>スピーカーに出る音をそのまま取得"]
-        CAP["capture_client.py<br/>モノラル化 → 16kHz に変換（soxr）"]
+        CAP["capture.py（トレイ内のスレッド）<br/>モノラル化 → 16kHz に変換（soxr）"]
         VIEW["ブラウザ<br/>字幕ビューア"]
+        LNK --> TRAY
         SRC --> LOOP --> CAP
+        TRAY -- "開始 / 停止" --> CAP
+        TRAY -- "応答したら開く" --> VIEW
     end
 
     subgraph WSL["WSL2 (Ubuntu) ・ .venv (Python 3.12)"]
@@ -34,6 +40,7 @@ flowchart TB
         TR -- "暫定 / 確定テキスト" --> HUB
         HUB --> OUT
         API <--> CFG
+        SH["scripts/start_server.sh<br/>初回に config.toml を作成・PID を記録"] --> API
     end
 
     subgraph GPU["RTX 3060 (VRAM 12GB)"]
@@ -41,6 +48,8 @@ flowchart TB
         M2["large-v3（任意）<br/>確定用・精度重視"]
     end
 
+    TRAY -- "wsl.exe（CREATE_NO_WINDOW）" --> SH
+    TRAY -- "/api/health ・ /api/pause<br/>/api/shutdown" --> API
     CAP -- "WebSocket /ingest<br/>16kHz mono int16 PCM" --> API
     TR <-- "CTranslate2 + CUDA<br/>(cuBLAS / cuDNN)" --> GPU
     HUB -- "WebSocket /captions<br/>JSON" --> VIEW
@@ -49,9 +58,52 @@ flowchart TB
 
 - **音声は PC の外に出ない。** サーバーは `127.0.0.1` だけで待ち受け、Windows の `localhost` からは WSL2 の localhost 転送で届く。同じ Wi-Fi の他の端末からも接続できない。
 - **Windows 側で取り込む理由:** WSL からは Windows で再生中の音を取得できないため、取り込みだけを Windows のプログラムに任せている。
+- **トレイアプリは WSL のフォルダーから直接動かす:** ショートカットは `uvw run \\wsl.localhost\...\windows\tray_app.py` を実行する。
+  WSL の場所はこのパスから割り出すので設定を二重に持たず、コードを更新しても入れ直しが要らない
+  （ローカルにコピーした場合と起動時間はほぼ同じ約 1 秒だった）。
 - **重い処理は WSL 側にまとめる:** GPU を使う処理、区切りの判定、Web UI の配信は 1 つのサーバープロセスが担当する。
 - **設定は `config.toml` とブラウザから:** モデル・再生速度・用語集はブラウザの設定画面から変えられ、`config.toml` に保存される。起動時の CLI 引数はそれより優先される。
 - **一時停止:** ブラウザで一時停止すると、受け取った音声を捨てるだけでなく、区切り待ちの途中の音声も破棄する（再開後に停止前の音声が字幕に混ざらない）。
+
+## 起動から終了まで（ワンクリック起動）
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 使う人
+    participant T as tray_app.py<br/>(Windows・トレイ)
+    participant W as wsl.exe → start_server.sh<br/>(窓なし)
+    participant S as サーバー<br/>(WSL・127.0.0.1:8765)
+    participant B as ブラウザ
+
+    U->>T: ショートカットをダブルクリック
+    T->>S: GET /api/health
+    alt 応答なし
+        T->>W: 起動（出力は %LOCALAPPDATA% のログへ）
+        W->>S: python -m realtime_transcriber
+    else すでに動いている（start.bat などで起動済み）
+        Note over T,S: 起動せずに使い回す
+    end
+    T->>S: 取り込みを開始（WebSocket /ingest。つながるまで再接続）
+    loop 応答するまで 1 秒ごと
+        T->>S: GET /api/health
+    end
+    S-->>T: 503 読み込み中（＝応答あり）
+    T->>B: 字幕画面を開く（「モデルを読み込み中…」が出る）
+    S-->>T: 200 準備完了 → アイコンが緑に
+    U->>T: トレイの「終了」
+    T->>T: 取り込みを止める（サーバーは途中の区間を確定）
+    T->>S: POST /api/shutdown
+    alt 15 秒で止まらない
+        T->>W: scripts/stop_server.sh（PID を確かめて TERM → KILL）
+    end
+    Note over T: それでも止まらなければ wsl.exe を止める。最後にトレイを閉じる
+```
+
+- **ブラウザは応答したらすぐ開く:** モデルの準備（数秒〜初回のダウンロードでは数分）を待たずに開き、画面の「読み込み中」で待たされている理由がわかるようにしている。
+- **終了で全部止める:** 使い回したサーバーも止める。止まらないときは PID ファイルで止めるが、PID が別のプロセスに使い回されていることがあるので、コマンドラインを確かめてから止める。
+- **アイコンの色で状態がわかる:** 灰（起動中・読み込み中）、緑（受信中）、橙（一時停止中）、青（取り込みオフ）、赤（エラー。通知も出す）。
+- **二重起動しない:** 名前付きミューテックスで 2 つ目の起動を検出し、字幕画面を開くだけで終わる。
 
 ## AI モデルはどこにあるか
 
