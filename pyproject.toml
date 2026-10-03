@@ -26,9 +26,11 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "httpx2>=2.13.1",
+    "matplotlib>=3.11.2",
     "pillow>=12.3.0",
     "pytest>=9.1.1",
     "pytest-timeout>=2.4.0",
+    "rapidfuzz>=3.14.6",
     "ruff>=0.16.10",
     "soxr>=1.1.0",
 ]
@@ -41,6 +43,6 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests", "windows"]
+pythonpath = ["tests", "windows", "."]
 timeout = 30  # 字幕を待ち続けて止まるテストを失敗にする（TestClient の待ちはシグナルで割り込めない）
 timeout_method = "thread"
