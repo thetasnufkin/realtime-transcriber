@@ -32,8 +32,17 @@ class Event:
 class Session:
     """1 本の音声ストリームの状態（バッファ・文脈）を持つ"""
 
-    def __init__(self, transcriber: Transcriber, speed: float, vad: Vad = get_speech_timestamps):
+    def __init__(
+        self,
+        transcriber: Transcriber,
+        speed: float,
+        vad: Vad = get_speech_timestamps,
+        stretch: bool = True,
+    ):
+        """stretch: 倍速の音声を WSOLA で通常の速さに戻してから認識する
+        （False でも無音の判定時間は速度で割る）"""
         self.tr = transcriber
+        self.stretch = stretch
         self.detect = vad
         self.buf = np.zeros(0, dtype=np.float32)
         self.consumed = 0  # buf の先頭が、ストリームの先頭から何サンプル目か
@@ -83,7 +92,9 @@ class Session:
         return max(gaps)[1] if gaps else n
 
     def _run(self, audio: np.ndarray, final: bool) -> str:
-        return self.tr.transcribe(time_stretch(audio, self.speed), self.context, final)
+        if self.stretch:
+            audio = time_stretch(audio, self.speed)
+        return self.tr.transcribe(audio, self.context, final)
 
     def _drop(self, n: int) -> None:
         """buf の先頭 n サンプルを捨てる"""

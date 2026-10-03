@@ -21,6 +21,7 @@ class Config:
     model: str = "kotoba-tech/kotoba-whisper-v2.0-faster"  # 暫定表示用（速さ重視）
     final_model: str = ""  # 確定用（精度重視）。空なら暫定用と同じモデル
     speed: float = 1.0  # 動画の再生速度
+    speed_restore: bool = True  # 倍速の音声を WSOLA で通常の速さに戻してから認識する
     glossary: list[str] = field(default_factory=list)  # 固有名詞
     host: str = "127.0.0.1"  # この PC からしか届かないようにする
     port: int = 8765
@@ -29,6 +30,10 @@ class Config:
     def __post_init__(self) -> None:
         for f in fields(self):
             value = getattr(self, f.name)
+            if str(f.type) == "bool":
+                if not isinstance(value, bool):
+                    raise ValueError(f"設定 {f.name} は true / false にしてください: {value!r}")
+                continue
             expected = {"float": (int, float), "int": int, "str": str}.get(str(f.type))
             if expected and (not isinstance(value, expected) or isinstance(value, bool)):
                 raise ValueError(f"設定 {f.name} の型が違います: {value!r}")
