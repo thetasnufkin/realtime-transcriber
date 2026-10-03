@@ -1,0 +1,18 @@
+# realtime-transcriber の設定。config.toml にコピーして使う（config.toml は git に入れない）
+# CLI 引数（--speed など）を付けて起動すると、そちらが優先される
+
+# 暫定表示用のモデル（速さ重視）
+model = "kotoba-tech/kotoba-whisper-v2.0-faster"
+# 確定用のモデル（精度重視）。空なら暫定用と同じモデルを使う。例: "large-v3"
+final_model = ""
+
+# 動画の再生速度（1.5, 2.0 など）。倍速の音声を通常速度に戻してから認識する
+speed = 1.0
+# 固有名詞の用語集。例: ["東雲電機", "汐留第二開発課"]
+glossary = []
+
+# 待ち受けるアドレス。127.0.0.1 ならこの PC からしか接続できない
+host = "127.0.0.1"
+port = 8765
+# 確定文の保存先
+out_dir = "transcripts"

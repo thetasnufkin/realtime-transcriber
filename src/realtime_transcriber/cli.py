@@ -16,6 +16,7 @@ from pathlib import Path
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
+from .config import Config, add_cli_args, config_from_args
 from .segmenter import Session
 from .transcriber import WhisperTranscriber
 
@@ -38,14 +39,13 @@ class Display:
                 f.write(f"[{ts}] {text}\n")
 
 
-async def run(args: argparse.Namespace) -> None:
-    glossary = [w.strip() for w in args.glossary.split(",") if w.strip()]
-    transcriber = WhisperTranscriber(args.model, args.final_model, glossary)
-    display = Display(Path(args.out_dir))
+async def run(cfg: Config) -> None:
+    transcriber = WhisperTranscriber(cfg.model, cfg.final_model or None, cfg.glossary)
+    display = Display(Path(cfg.out_dir))
 
     async def handler(ws) -> None:
         print(f"\n[WS] クライアント接続: {ws.remote_address}")
-        session = Session(transcriber, args.speed)
+        session = Session(transcriber, cfg.speed)
         try:
             while True:
                 try:
@@ -62,25 +62,23 @@ async def run(args: argparse.Namespace) -> None:
                 display.show(kind, text)
             print("\n[WS] クライアント切断")
 
-    async with serve(handler, args.host, args.port, max_size=None):
-        print(f"[WS] ws://{args.host}:{args.port} で待機中（保存先: {display.path}）")
-        print(f"     再生速度 {args.speed}x / 用語集 {glossary or 'なし'}")
+    async with serve(handler, cfg.host, cfg.port, max_size=None):
+        print(f"[WS] ws://{cfg.host}:{cfg.port} で待機中（保存先: {display.path}）")
+        print(f"     再生速度 {cfg.speed}x / 用語集 {cfg.glossary or 'なし'}")
         print("     Windows 側で capture_client.py を起動してください。Ctrl+C で終了")
         await asyncio.Future()
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "--model", default="kotoba-tech/kotoba-whisper-v2.0-faster", help="暫定表示用（速さ重視）"
-    )
-    ap.add_argument("--final-model", default=None, help="確定用（精度重視）。例: large-v3")
-    ap.add_argument("--speed", type=float, default=1.0, help="動画の再生速度（1.5, 2.0 など）")
-    ap.add_argument("--glossary", default="", help="固有名詞をカンマ区切りで（例: 東雲電機,汐留第二開発課）")
-    ap.add_argument("--host", default="0.0.0.0")
-    ap.add_argument("--port", type=int, default=8765)
-    ap.add_argument("--out-dir", default="transcripts")
+    add_cli_args(ap)
+    args = ap.parse_args()
     try:
-        asyncio.run(run(ap.parse_args()))
+        cfg = config_from_args(args)
+    except (ValueError, TypeError) as e:
+        ap.error(str(e))
+    print(f"[CONFIG] {args.config if args.config.exists() else '既定値'} を使用")
+    try:
+        asyncio.run(run(cfg))
     except KeyboardInterrupt:
         print("\n終了しました")
