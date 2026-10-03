@@ -9,7 +9,7 @@ Windows で今鳴っている音（ブラウザ・動画・会議アプリなど
 マイクは使わない。サーバーが起動していなければ、準備できるまで自動で再接続を繰り返す。
 
   uv run capture_client.py
-  uv run capture_client.py --url ws://172.x.x.x:8765   # localhost で繋がらない場合
+  uv run capture_client.py --url ws://localhost:9000/ingest   # ポートを変えた場合
 """
 import argparse
 import queue
@@ -18,7 +18,7 @@ import time
 import numpy as np
 import pyaudiowpatch as pyaudio
 import soxr
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, InvalidHandshake
 from websockets.sync.client import connect
 
 TARGET_SR = 16000
@@ -48,7 +48,7 @@ def drain(q: queue.Queue) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--url", default="ws://localhost:8765")
+    ap.add_argument("--url", default="ws://localhost:8765/ingest")
     args = ap.parse_args()
 
     p = pyaudio.PyAudio()
@@ -84,7 +84,7 @@ def main() -> None:
                         y = resampler.resample_chunk((x / 32768.0).astype(np.float32))
                         if len(y):
                             ws.send((np.clip(y, -1, 1) * 32767).astype(np.int16).tobytes())
-            except (OSError, TimeoutError, ConnectionClosed):
+            except (OSError, TimeoutError, ConnectionClosed, InvalidHandshake):
                 print(f"[WS] サーバー待ち... ({args.url})", end="\r", flush=True)
                 time.sleep(RETRY_S)
     except KeyboardInterrupt:

@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from realtime-transcriber!")
+"""完全ローカルのリアルタイム日本語文字起こし"""

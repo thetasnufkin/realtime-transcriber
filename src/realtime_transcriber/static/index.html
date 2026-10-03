@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>リアルタイム字幕</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>リアルタイム字幕</h1>
+    <p id="status" class="status" data-state="offline" role="status">サーバーに接続中…</p>
+    <div class="toolbar">
+      <button id="pause" type="button" disabled>⏸ 一時停止</button>
+      <label class="toggle">
+        <input id="autoscroll" type="checkbox" checked>
+        自動スクロール
+      </label>
+      <div class="group" role="group" aria-label="文字サイズ">
+        <button id="smaller" type="button" aria-label="文字を小さく">A−</button>
+        <output id="size" aria-live="polite"></output>
+        <button id="larger" type="button" aria-label="文字を大きく">A+</button>
+      </div>
+      <div class="group" role="group" aria-label="ダウンロード">
+        <a class="button" href="/api/transcript.txt" download title="確定文をテキストで保存">TXT</a>
+        <a class="button" href="/api/transcript.srt" download title="確定文を字幕ファイル (SRT) で保存">SRT</a>
+      </div>
+      <button id="open-settings" type="button">⚙ 設定</button>
+    </div>
+  </header>
+  <main id="scroller">
+    <p id="empty" class="empty">音声を再生すると、ここに字幕が表示されます。</p>
+    <ol id="finals" class="captions"></ol>
+    <ol id="partials" class="captions" aria-live="polite"></ol>
+  </main>
+  <button id="jump" class="jump" type="button" hidden>↓ 最新へ</button>
+
+  <dialog id="settings" aria-labelledby="settings-title">
+    <form id="settings-form" novalidate>
+      <h2 id="settings-title">設定</h2>
+      <p class="hint">保存するとすぐに反映され、config.toml にも保存されます。</p>
+
+      <fieldset>
+        <legend>再生速度</legend>
+        <div class="row">
+          <input id="speed" name="speed" type="number" min="0.5" max="4" step="0.05" required>
+          <span>倍</span>
+          <div class="presets" role="group" aria-label="よく使う速度">
+            <button type="button" data-speed="1">1</button>
+            <button type="button" data-speed="1.25">1.25</button>
+            <button type="button" data-speed="1.5">1.5</button>
+            <button type="button" data-speed="1.75">1.75</button>
+            <button type="button" data-speed="2">2</button>
+          </div>
+        </div>
+        <p class="hint">動画の再生速度に合わせます。倍速の音声を通常の速さに戻してから認識します。</p>
+        <p class="override" data-key="speed" hidden></p>
+      </fieldset>
+
+      <fieldset>
+        <legend><label for="glossary">用語集</label></legend>
+        <textarea id="glossary" name="glossary" rows="4" placeholder="1 行に 1 語（例: 社名、部署名、製品名）"></textarea>
+        <p class="hint">固有名詞を正しい表記で出しやすくします。</p>
+        <p class="override" data-key="glossary" hidden></p>
+      </fieldset>
+
+      <fieldset>
+        <legend>モデル</legend>
+        <label for="model">暫定表示用（速さ重視）</label>
+        <input id="model" name="model" list="model-options" required spellcheck="false">
+        <p class="override" data-key="model" hidden></p>
+        <label for="final_model">確定用（精度重視。空なら暫定用と同じ）</label>
+        <input id="final_model" name="final_model" list="model-options" spellcheck="false">
+        <p class="override" data-key="final_model" hidden></p>
+        <datalist id="model-options">
+          <option value="kotoba-tech/kotoba-whisper-v2.0-faster">日本語特化・軽量</option>
+          <option value="large-v3">高精度・重い</option>
+          <option value="large-v3-turbo">large-v3 の高速版</option>
+        </datalist>
+        <p class="hint">モデルを変えると裏で読み込み、終わったら切り替えます（それまでは今のモデルで認識します）。
+          初めて使うモデルはダウンロードに時間がかかります。</p>
+      </fieldset>
+
+      <p id="settings-error" class="error" role="alert" hidden></p>
+      <div class="actions">
+        <button type="button" id="cancel-settings">キャンセル</button>
+        <button type="submit" class="primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="/static/app.js"></script>
+</body>
+</html>
