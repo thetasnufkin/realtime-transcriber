@@ -12,4 +12,8 @@ fi
 
 # GPU のライブラリのパス（LD_LIBRARY_PATH）は activate で設定される
 source .venv/bin/activate
+
+# 終了時の後片付け用に PID を残す（exec するので python がこの PID を引き継ぐ）。scripts/stop_server.sh が使う
+mkdir -p run
+echo $$ > run/server.pid
 exec python -m realtime_transcriber "$@"
