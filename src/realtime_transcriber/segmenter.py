@@ -37,7 +37,7 @@ class Session:
         transcriber: Transcriber,
         speed: float,
         vad: Vad = get_speech_timestamps,
-        stretch: bool = True,
+        stretch: bool = False,
     ):
         """stretch: 倍速の音声を WSOLA で通常の速さに戻してから認識する
         （False でも無音の判定時間は速度で割る）"""

@@ -101,8 +101,9 @@ def test_max_length_cuts_at_a_gap(speed: float):
     assert all(a.end <= b.start + 1e-9 for a, b in zip(finals, finals[1:], strict=False))
     assert finals[-1].end <= len(audio) / SR
     for a in tr.finals[:-1]:  # 最後は無音で切れた区間
-        assert len(a) <= (MAX_SEGMENT_S + 0.5) * SR  # time_stretch 後の長さ = 通常速度換算
-        assert len(a) >= 0.3 * MAX_SEGMENT_S * SR
+        normal = len(a) * speed  # 倍速のまま認識に渡すので、通常速度に換算する
+        assert normal <= (MAX_SEGMENT_S + 0.5) * SR
+        assert normal >= 0.3 * MAX_SEGMENT_S * SR
     if speed == 1.0:
         assert sum(voiced(a) for a in tr.finals) == voiced(audio)
         for a in tr.finals[:-1]:
