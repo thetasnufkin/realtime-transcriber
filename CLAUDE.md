@@ -36,9 +36,10 @@ src/realtime_transcriber/     WSL。サーバー本体（python -m realtime_tran
   transcriber.py              Transcriber Protocol と faster-whisper 実装
   config.py                   既定値 < config.toml < CLI 引数
   static/                     ビューア（素の HTML/JS/CSS）
-server/transcribe_server.py   互換シム（start.bat から呼ばれる）
+scripts/start_server.sh       WSL。初回に config.toml を作り（確定用 large-v3）、venv を有効にして起動
+server/transcribe_server.py   互換シム（旧 start.bat 用）
 capture_client.py             Windows。WASAPI ループバックで再生音を取り込みサーバーへ送る
-start.bat                     Windows。上の 2 つをまとめて起動
+start.bat                     Windows。サーバー起動 → 応答したらブラウザで字幕画面 → capture_client。どこに置いても動く
 tests/                        pytest（GPU 不要。偽の Transcriber と偽の VAD を使う）
 ```
 

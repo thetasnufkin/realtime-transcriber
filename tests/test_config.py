@@ -58,3 +58,9 @@ def test_cli_overrides_toml_only_where_given(tmp_path: Path):
 def test_invalid_config_is_rejected(tmp_path: Path, text: str):
     with pytest.raises(ValueError):
         load_config(write(tmp_path, text))
+
+
+def test_example_has_the_line_start_server_sh_replaces():
+    """scripts/start_server.sh は初回にこの行を large-v3 に置き換えて config.toml を作る"""
+    lines = (ROOT / "config.example.toml").read_text(encoding="utf-8").splitlines()
+    assert 'final_model = ""' in lines
