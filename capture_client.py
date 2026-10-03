@@ -18,7 +18,7 @@ import time
 import numpy as np
 import pyaudiowpatch as pyaudio
 import soxr
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, InvalidHandshake
 from websockets.sync.client import connect
 
 TARGET_SR = 16000
@@ -84,7 +84,7 @@ def main() -> None:
                         y = resampler.resample_chunk((x / 32768.0).astype(np.float32))
                         if len(y):
                             ws.send((np.clip(y, -1, 1) * 32767).astype(np.int16).tobytes())
-            except (OSError, TimeoutError, ConnectionClosed):
+            except (OSError, TimeoutError, ConnectionClosed, InvalidHandshake):
                 print(f"[WS] サーバー待ち... ({args.url})", end="\r", flush=True)
                 time.sleep(RETRY_S)
     except KeyboardInterrupt:

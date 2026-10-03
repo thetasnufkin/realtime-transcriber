@@ -104,13 +104,11 @@ def create_app(
     @app.websocket("/")
     async def ingest(ws: WebSocket) -> None:
         nonlocal ingest_clients
-        if tr is None:
-            await ws.close(code=1013)  # モデルの準備前。クライアントは再接続してくる
-            return
+        # モデルの準備前でも接続は受け入れる（断ると旧 capture_client は再接続せずに落ちる）
         await ws.accept()
         source = next(source_ids)
-        session = Session(tr, cfg.speed, vad)
-        offset = hub.elapsed()
+        session: Session | None = None  # モデルの準備ができてから作る
+        offset = 0.0
         chunks: asyncio.Queue[bytes | None] = asyncio.Queue()
 
         async def reader() -> None:
@@ -120,12 +118,14 @@ def create_app(
                     msg = await ws.receive()
                     if msg["type"] == "websocket.disconnect":
                         break
-                    if msg.get("bytes"):
+                    # モデルの準備前に届いた音声は、認識できないので捨てる
+                    if msg.get("bytes") and tr is not None:
                         chunks.put_nowait(msg["bytes"])
             finally:
                 chunks.put_nowait(None)
 
         async def process(force: bool) -> None:
+            assert session is not None
             async with gpu_lock:
                 events = await asyncio.to_thread(session.step, force)
             for event in events:
@@ -141,7 +141,7 @@ def create_app(
                 try:
                     chunk = await asyncio.wait_for(chunks.get(), timeout=IDLE_TIMEOUT_S)
                 except TimeoutError:
-                    if len(session.buf):
+                    if session is not None and len(session.buf):
                         await process(force=True)
                     continue
                 # 認識が追いつかず溜まった分はまとめて渡す
@@ -149,12 +149,17 @@ def create_app(
                     if chunk is None:
                         closed = True
                         break
+                    if session is None:
+                        assert tr is not None  # reader は準備後の音声だけを渡す
+                        session = Session(tr, cfg.speed, vad)
+                        offset = hub.elapsed()
                     session.add(chunk)
                     try:
                         chunk = chunks.get_nowait()
                     except asyncio.QueueEmpty:
                         break
-                await process(force=closed)
+                if session is not None:
+                    await process(force=closed)
         finally:
             reader_task.cancel()
             ingest_clients -= 1  # キャンセルされても数がずれないよう、await より先に減らす

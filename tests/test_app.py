@@ -10,7 +10,6 @@ import pytest
 import uvicorn
 from fakes import FakeTranscriber, energy_vad, silence, to_pcm, tone
 from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 from websockets.sync.client import connect
 
 from realtime_transcriber.app import create_app
@@ -59,16 +58,11 @@ def test_viewer_and_static_files_are_served(tmp_path: Path):
         assert client.get("/static/app.js").status_code == 200
 
 
-def test_health_and_ingest_wait_for_the_model(tmp_path: Path):
+def test_health_waits_for_the_model(tmp_path: Path):
     gate = threading.Event()
     with make_client(tmp_path, gate) as client:
         r = client.get("/api/health")
         assert (r.status_code, r.json()["status"]) == (503, "loading")
-        with pytest.raises(WebSocketDisconnect) as e:
-            with client.websocket_connect("/ingest"):
-                pass
-        assert e.value.code == 1013  # capture_client は再接続を繰り返す
-
         gate.set()
         wait_ready(client)
         assert client.get("/api/health").json() == {"status": "ready"}
@@ -131,32 +125,72 @@ def test_shutdown_calls_the_hook(tmp_path: Path):
 
 
 @pytest.fixture
-def live_server(tmp_path: Path):
-    """本物の uvicorn をスレッドで起動する（空いているポートを使う）"""
-    app = create_app(Config(out_dir=str(tmp_path)), lambda cfg: FakeTranscriber(), vad=energy_vad, echo=False)
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    deadline = time.monotonic() + 5
-    while not server.started:
-        assert time.monotonic() < deadline
-        time.sleep(0.02)
-    port = server.servers[0].sockets[0].getsockname()[1]
-    yield f"127.0.0.1:{port}"
-    server.should_exit = True
-    thread.join(5)
+def start_live_server(tmp_path: Path):
+    """本物の uvicorn をスレッドで起動する（空いているポートを使う）。TestClient と違い、
+    実際のクライアントが受け取る応答（HTTP ステータス・切断時の挙動）を確かめられる"""
+    servers = []
+
+    def start(gate: threading.Event | None = None) -> str:
+        def load(cfg: Config) -> FakeTranscriber:
+            if gate is not None:
+                assert gate.wait(5)
+            return FakeTranscriber()
+
+        app = create_app(Config(out_dir=str(tmp_path)), load, vad=energy_vad, echo=False)
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        servers.append((server, thread))
+        deadline = time.monotonic() + 5
+        while not server.started:
+            assert time.monotonic() < deadline
+            time.sleep(0.02)
+        return f"127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
+
+    yield start
+    for server, thread in servers:
+        server.should_exit = True
+        thread.join(5)
 
 
-def test_disconnect_flushes_the_rest(live_server: str):
-    """無音を待たずに切断しても、途中の区間を確定させてから暫定表示を消す"""
+def wait_live_ready(addr: str) -> None:
     deadline = time.monotonic() + 5
     while True:
         try:
-            urllib.request.urlopen(f"http://{live_server}/api/health")
-            break
+            urllib.request.urlopen(f"http://{addr}/api/health")
+            return
         except urllib.error.HTTPError:  # 503: 読み込み中
             assert time.monotonic() < deadline
             time.sleep(0.02)
+
+
+def test_ingest_during_model_loading_is_accepted(start_live_server):
+    """読み込み中に繋いでも断らない（旧 capture_client は 403 を受けると再接続せずに落ちる）。
+    準備前の音声は捨て、準備後の音声から認識する"""
+    gate = threading.Event()
+    live_server = start_live_server(gate)
+    with connect(f"ws://{live_server}/captions") as cap:
+        assert json.loads(cap.recv())["type"] == "history"
+        assert json.loads(cap.recv())["model_state"] == "loading"
+        with connect(f"ws://{live_server}/", open_timeout=3) as ing:  # 旧パスで接続
+            send_audio(ing, np.concatenate([tone(1.0), silence(1.0)]))  # 準備前: 捨てられる
+            time.sleep(0.3)
+            gate.set()
+            wait_live_ready(live_server)
+            send_audio(ing, np.concatenate([tone(2.0), silence(1.0)]))  # 準備後: 認識される
+            msgs = []
+            while not (msgs and msgs[-1]["type"] == "final"):
+                msgs.append(json.loads(cap.recv(timeout=5)))
+
+    finals = [m for m in msgs if m["type"] == "final"]
+    assert len(finals) == 1
+    assert float(finals[0]["text"].removesuffix("s")) >= 2.0  # 準備後の 2 秒の発話
+
+
+def test_disconnect_flushes_the_rest(start_live_server):
+    """無音を待たずに切断しても、途中の区間を確定させてから暫定表示を消す"""
+    live_server = start_live_server()
+    wait_live_ready(live_server)
 
     with connect(f"ws://{live_server}/captions") as cap:
         assert json.loads(cap.recv())["type"] == "history"
