@@ -1,7 +1,7 @@
 [project]
 name = "realtime-transcriber"
 version = "0.1.0"
-description = "Add your description here"
+description = "Fully local real-time Japanese transcription (faster-whisper + Silero VAD)"
 requires-python = ">=3.12"
 dependencies = [
     "audiotsm>=0.1.2",
@@ -14,8 +14,24 @@ dependencies = [
 ]
 
 [project.scripts]
-realtime-transcriber = "realtime_transcriber:main"
+realtime-transcriber = "realtime_transcriber.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.22,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
