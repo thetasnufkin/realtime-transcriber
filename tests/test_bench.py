@@ -21,8 +21,8 @@ def test_cer():
 
 
 def test_term_recall():
-    assert term_recall(["東雲電機", "汐留第二開発課"], "東雲電機の汐留第二開発課です") == 1.0
-    assert term_recall(["東雲電機", "汐留第二開発課"], "しののめ電機の DX 推進部です") == 0.5
+    assert term_recall(["東雲電機", "AI研究室"], "東雲電機のＡＩ研究室です") == 1.0  # 全角英字も揃える
+    assert term_recall(["東雲電機", "AI研究室"], "しののめ電機の AI 研究室です") == 0.5
 
 
 def test_build_stream_places_utterances_with_gaps():
